@@ -42,6 +42,19 @@ let test_mem version n () =
       false (MyBtree.mem tree absent)
   done
 
+let test_clear version n () =
+  let module MyBtree = (val get_tree version) in
+  let root = v_to_s version // Format.sprintf "tree_clear_%i" n in
+  let tree = MyBtree.create ~root in
+  let keys = Array.init (2 * n) (fun _ -> generate_key ()) in
+  Array.iter (fun key -> MyBtree.add tree key (0, 0, 0)) (Array.sub keys 0 n);
+  MyBtree.clear tree;
+  Array.iter (fun key -> MyBtree.add tree key (0, 0, 0)) (Array.sub keys n n);
+  Array.iteri
+    (fun i key ->
+      Alcotest.(check bool) (Format.sprintf "Checking key %i" i) (i >= n) (MyBtree.mem tree key))
+    keys
+
 let testable_repr t = Alcotest.testable (Repr.pp t) Repr.(unstage (equal t))
 
 let check_repr t = Alcotest.check (testable_repr t)
@@ -125,6 +138,7 @@ let suite version =
       ("Addition", `Quick, test_addition version 1000);
       ("Mem", `Quick, test_mem version 1000);
       ("Retrieval", `Quick, test_retrieval version 1000);
+      ("Clear", `Quick, test_clear version 1000);
       ("Snapshot", `Quick, test_snapshot version);
       ("Huge addition", `Slow, test_addition version 100_000);
       ("Huge retrieval", `Slow, test_retrieval version 100_000);
