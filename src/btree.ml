@@ -91,7 +91,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let rec aux address =
       let page = Store.load tree.store address in
       match (Page.Header.load page).kind with
-      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-Btree"
+      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
       | Leaf ->
           let leaf = Leaf.load tree.store address in
           let ret = Leaf.length leaf in
@@ -130,7 +130,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   let rec go_to_leaf tree key address =
     let page = Store.load tree.store address in
     match page |> Page.Header.load |> fun x -> x.kind with
-    | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-Btree"
+    | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
     | Leaf -> address
     | Node _depth ->
         let node = Node.load tree.store address in
@@ -164,7 +164,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       match (Page.Header.load page).kind with
       | Overflow_leaf | Overflow_node ->
           failwith
-            (Fmt.str "Overflow page in B-Btree at address %i : %a" address Page.Header.pp_raw page)
+            (Fmt.str "Overflow page in B-tree at address %i:[%a]" address Page.Header.pp_raw page)
       | Leaf -> address :: path
       | Node _depth ->
           let node = Node.load tree.store address in
@@ -224,7 +224,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let rec aux address =
       let page = Store.load tree.store address in
       match (Page.Header.load page).kind with
-      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-Btree"
+      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
       | Leaf ->
           let leaf = Leaf.load tree.store address in
           Leaf.iter leaf func;
@@ -343,7 +343,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       let rec aux tree key address acc =
         let page = Store.load tree.store address in
         match page |> Page.Header.load |> fun x -> x.kind with
-        | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-Btree"
+        | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
         | Leaf -> address :: acc
         | Node _depth ->
             let node = Node.load tree.store address in
