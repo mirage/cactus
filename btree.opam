@@ -1,0 +1,38 @@
+opam-version: "2.0"
+synopsis: "Proof of concept for disk B-Trees"
+description:
+  "This package exposes B-Tree functionalities to persist on and load from disk."
+maintainer: "gabriel.belouze@tarides.com"
+authors: "Gabriel Belouze"
+license: "MIT"
+homepage: "https://github.com/gbelouze/tarides-gabriel-internship/"
+bug-reports:
+  "https://github.com/gbelouze/tarides-gabriel-internship/issues/"
+depends: [
+  "dune" {>= "2.0"}
+  "ocaml" {>= "4.08.0"}
+  "alcotest" {with-test}
+  "repr" {>= "0.2.1"}
+  "ppx_repr" {>= "0.2.1"}
+  "hex" {>= "1.4.0"}
+  "irmin" {>= "2.3.0" & with-test}
+  "logs" {>= "0.7.0"}
+  "mtime" {>= "1.2.0"}
+  "progress" {>= "0.1.1" & with-test}
+]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+]
+dev-repo:
+  "git+https://github.com/gbelouze/tarides-gabriel-internship.git"
