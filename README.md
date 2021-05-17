@@ -7,6 +7,7 @@ Clone [bentov](https://github.com/gbelouze/bentov) and [oracle](https://github.c
 cd ..
 git clone https://github.com/gbelouze/bentov
 git clone https://github.com/gbelouze/oracle
-ln -s bentov btree/
-ln -s oracle btree/
+cd btree/
+ln -s ../bentov
+ln -s ../oracle
 ```
