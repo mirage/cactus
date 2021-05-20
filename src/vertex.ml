@@ -190,9 +190,15 @@ functor
 
     let mem t key =
       tic stat_mem;
-      let compare = match Kind.v with `Leaf -> compare t key | `Node -> compare_interval t key in
-      let n = Utils.binary_search ~safe:true ~compare 0 (entry_number t) in
-      let ret = Key.equal (nth_key t n) key && not (nth_dead t n) in
+      let ret =
+        if entry_number t = 0 then false
+        else
+          let compare =
+            match Kind.v with `Leaf -> compare t key | `Node -> compare_interval t key
+          in
+          let n = Utils.binary_search ~safe:true ~compare 0 (entry_number t) in
+          Key.equal (nth_key t n) key && not (nth_dead t n)
+      in
       tac stat_mem;
       ret
 
