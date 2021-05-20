@@ -19,7 +19,7 @@ module Make (Key : Index.Key.S) (Value : Index.Value.S) = struct
 
   let try_merge _t = raise (NotInBtree "try_merge")
 
-  let merge _t = raise (NotInBtree "merge")
+  let merge _t = () (* raise (NotInBtree "merge") *)
 
   let is_merging _t = raise (NotInBtree "is_merging")
 
