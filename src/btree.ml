@@ -112,17 +112,19 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           | None -> "without cache"
           | Some cache -> Fmt.str "with cache id %i" cache));
     let cache = match cache with None -> empty_cache () | Some cache -> cache in
-    if Hashtbl.mem caches cache then
-      (* assert (root = Hashtbl.find roots cache); *)
-      Hashtbl.find caches cache
+    let overwriting = Hashtbl.mem caches cache && root != Hashtbl.find roots cache in
+    if Hashtbl.mem caches cache && not overwriting then Hashtbl.find caches cache
     else
       let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
       let t = { store = Store.init ~root } in
-      if just_load then ()
-        (* Log.info (fun reporter -> length t |> reporter "Loading %i bindings") *)
+      if just_load then Log.debug (fun reporter -> length t |> reporter "Loading %i bindings")
       else (
         Leaf.init t.store (Store.root t.store) |> ignore;
         flush t);
+      if overwriting then
+        Log.warn (fun reporter ->
+            reporter "Overwriting cache with id %i from %s to root %s" cache
+              (Hashtbl.find roots cache) root);
       Hashtbl.add roots cache root;
       Hashtbl.add caches cache t;
       t
