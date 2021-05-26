@@ -39,6 +39,8 @@ module type S = sig
       [Overcommit_memory] does not block but continues to fill the (already full) cache.
       @param log_size the maximum number of bindings in the `log` IO. *)
 
+  (* TODO : [cache] is basically a (string, btree) hashtbl which maps a path to the btree living there *)
+
   val clear : t -> unit
   (** [clear t] clears [t] so that there are no more bindings in it. *)
 
@@ -78,6 +80,8 @@ module type S = sig
       If [immediately] is passed, this operation will abort any ongoing background processes. This
       guarantees not to corrupt the store, but may require additional work to be done on the next
       startup. *)
+
+  (* TODO : close must actually close the file handles if there are no more reference to the cache, otherwise decrease the reference counter. Conversely, [v] must bump a cache reference counter *)
 
   val sync : t -> unit
   (** [sync t] syncs a read-only index with the files on disk. Raises {!RW_not_allowed} if called by
