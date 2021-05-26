@@ -7,21 +7,7 @@ functor
   (Params : Params.S)
   (Store : Store.S)
   (Key : Data.K)
-  (Bound : sig
-     type t
-
-     val encode : t -> Encoder.t
-
-     val decode : Encoder.t -> t
-
-     val size : int
-
-     val pp : Format.formatter -> t -> unit
-   end)
-  ((* the thing that is bound, i.e. either a value or an address *)
-   Kind : sig
-     val v : [ `Leaf | `Node ]
-   end)
+  (Bound : BOUND)
   ->
   struct
     type store = Store.t
@@ -40,7 +26,7 @@ functor
     type t = { store : store; header : FmtHeader.t; buff : bytes }
 
     let depth =
-      match Kind.v with
+      match Bound.kind with
       | `Leaf -> ( function _ -> 0)
       | `Node -> (
           function
@@ -93,7 +79,7 @@ functor
       open Fmt
 
       let pp_entry ppf (dead, key, bound) =
-        let color = match Kind.v with `Leaf -> `Blue | `Node -> `Cyan in
+        let color = match Bound.kind with `Leaf -> `Blue | `Node -> `Cyan in
         pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a%,%a@]@;@[<hov 1>bound:@ %a%,%a@]"
           (CommonHeader.Flag.pp_raw |> styled (`Bg `Red))
           dead
@@ -127,8 +113,8 @@ functor
       (* initialises the header of a new vertex *)
       assert (
         match (kind : Field.kind) with
-        | Node _ -> Kind.v = `Node
-        | Leaf -> Kind.v = `Leaf
+        | Node _ -> Bound.kind = `Node
+        | Leaf -> Bound.kind = `Leaf
         | _ -> failwith "unexepected kind");
       let page = Store.load store address in
       let buff = Page.buff page in
@@ -181,7 +167,9 @@ functor
 
     let find t key =
       tic stat_find;
-      let compare = match Kind.v with `Leaf -> compare t key | `Node -> compare_interval t key in
+      let compare =
+        match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+      in
       let n = Utils.binary_search ~compare 0 (entry_number t) in
       if nth_dead t n then raise Not_found;
       let ret = nth_bound t n in
@@ -194,7 +182,7 @@ functor
         if entry_number t = 0 then false
         else
           let compare =
-            match Kind.v with `Leaf -> compare t key | `Node -> compare_interval t key
+            match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
           in
           let n = Utils.binary_search ~safe:true ~compare 0 (entry_number t) in
           Key.equal (nth_key t n) key && not (nth_dead t n)
@@ -286,8 +274,8 @@ functor
     let migrate kvs kind =
       assert (
         match (kind : Field.kind) with
-        | Leaf -> Kind.v = `Leaf
-        | Node _ -> Kind.v = `Node
+        | Leaf -> Bound.kind = `Leaf
+        | Node _ -> Bound.kind = `Node
         | _ -> failwith "Unexpected kind");
       let alive = "\000" in
       let kvs = List.map (( ^ ) alive) kvs in
@@ -305,9 +293,11 @@ functor
 
 module LeafMake (Params : Params.S) (Store : Store.S) (Key : Data.K) (Value : Data.V) = struct
   include
-    Make (Params) (Store) (Key) (Value)
+    Make (Params) (Store) (Key)
       (struct
-        let v = `Leaf
+        include Value
+
+        let kind = `Leaf
       end)
 end
 
@@ -318,8 +308,7 @@ module NodeMake (Params : Params.S) (Store : Store.S) (Key : Data.K) = struct
     Make (Params) (Store) (Key)
       (struct
         include CommonFields.Address
-      end)
-      (struct
-        let v = `Node
+
+        let kind = `Node
       end)
 end
