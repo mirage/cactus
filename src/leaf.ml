@@ -18,7 +18,8 @@ functor
 
     let pp ppf t = LeafFmt.pp ppf t.leaf
 
-    let init store address = { store; leaf = LeafFmt.create store Field.Leaf address; address }
+    let init store address =
+      { store; leaf = LeafFmt.create store (Leaf : Field.kind) address; address }
 
     let create store =
       let address = Store.allocate store in
@@ -53,5 +54,5 @@ functor
 
     let length t = LeafFmt.length t.leaf
 
-    let migrate kvs = LeafFmt.migrate kvs Field.Leaf
+    let migrate kvs = LeafFmt.migrate kvs (Leaf : Field.kind)
   end

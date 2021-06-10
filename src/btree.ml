@@ -54,10 +54,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let snapshot ?(depth = 0) t =
     (* for every node/leaf in [t] which are at least [depth] away from the leaves, [snapshot ~depth t], write in a file its rep as given by their corresponding pp function *)
-    let func address page =
-      let kind = (Page.Header.load page).kind in
+    let snap_page address page =
+      let kind = Page.kind page in
       if Common.Kind.to_depth kind >= depth then
-        match kind with
+        match Common.Kind.from_t kind with
         | Leaf ->
             let leaf = Leaf.load t.store address in
             let out_file =
@@ -77,7 +77,6 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." (Node.pp |> Fmt.vbox) node;
             close_out out_file
-        | _ -> ()
     in
     flush t;
     Store.iter t.store func;
@@ -90,8 +89,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   let length tree =
     let rec aux address =
       let page = Store.load tree.store address in
-      match (Page.Header.load page).kind with
-      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
+      match Page.kind page |> Common.Kind.from_t with
       | Leaf ->
           let leaf = Leaf.load tree.store address in
           let ret = Leaf.length leaf in
@@ -131,8 +129,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let rec go_to_leaf tree key address =
     let page = Store.load tree.store address in
-    match page |> Page.Header.load |> fun x -> x.kind with
-    | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
+    match Page.kind page |> Common.Kind.from_t with
     | Leaf -> address
     | Node _depth ->
         let node = Node.load tree.store address in
@@ -160,26 +157,23 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     tac stat_mem;
     ret
 
-  let path_to_leaf tree key =
+  let path_to_leaf t key =
     let rec aux path address =
-      let page = Store.load tree.store address in
-      match (Page.Header.load page).kind with
-      | Overflow_leaf | Overflow_node ->
-          failwith
-            (Fmt.str "Overflow page in B-tree at address %i:[%a]" address Page.Header.pp_raw page)
+      let page = Store.load t.store address in
+      match Page.kind page |> Common.Kind.from_t with
       | Leaf -> address :: path
       | Node _depth ->
-          let node = Node.load tree.store address in
+          let node = Node.load t.store address in
           aux (address :: path) (Node.find node key)
     in
 
-    aux [] (Store.root tree.store) |> List.rev
+    aux [] (Store.root t.store)
 
   let add tree inkey invalue =
     tic stat_add;
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
-    let path = path_to_leaf tree key |> List.rev in
+    let path = path_to_leaf tree key in
     let leaf_address = List.hd path in
 
     let rec split_nodes nodes promoted allocated_address =
@@ -187,7 +181,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | [] ->
           (* this case happens only when no nodes are there in the first place *and* the leaf has overflowed
              This means that the tree is a single leaf, and we have to create a new root on top of it *)
-          let root = Node.create tree.store (Common.Kind.of_depth 1) in
+          let root = Node.create tree.store Common.Kind.(of_depth 1 |> from_t) in
           Node.add root min_key leaf_address;
           Node.add root promoted allocated_address;
           Store.reroot tree.store (Node.self_address root);
@@ -198,7 +192,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           Node.add root promoted allocated_address;
           if Node.overflow root then (
             let promoted, allocated = Node.split root in
-            let new_root = Node.create tree.store (Common.Kind.of_depth (1 + Node.depth root)) in
+            let new_root =
+              Node.create tree.store Common.Kind.(of_depth (1 + Node.depth root) |> from_t)
+            in
             Node.add new_root min_key address;
             Node.add new_root promoted (Node.self_address allocated);
             Store.reroot tree.store (Node.self_address new_root);
@@ -225,8 +221,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let func key value = func (key |> Key.to_input) (value |> Value.to_input) in
     let rec aux address =
       let page = Store.load tree.store address in
-      match (Page.Header.load page).kind with
-      | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
+      match Page.kind page |> Common.Kind.from_t with
       | Leaf ->
           let leaf = Leaf.load tree.store address in
           Leaf.iter leaf func;
@@ -279,7 +274,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Store.Private.init_migration store;
 
     let get_address () =
-      !address |> Common.Address.of_int |> Common.Address.encode |> Encoder.dump
+      let open Common.Address in
+      let buff = Bytes.create size in
+      !address |> to_t |> set buff ~off:0;
+      Bytes.to_string buff
     in
     let rec create leftmost depth n =
       match depth with
@@ -305,7 +303,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
                 (if leftmost && i = 0 then min_key |> Key.debug_dump else k_dump) ^ address_dump)
               ns
           in
-          let content = Node.migrate kvs (Common.Kind.of_depth depth) in
+          let content = Node.migrate kvs Common.Kind.(of_depth depth |> from_t) in
           let pad = Params.page_sz - String.length content in
           incr address;
           add (content ^ String.make pad '\000');
@@ -329,7 +327,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
     let pp t ppf address =
       let page = Store.load t.store address in
-      match (Page.Header.load page).kind with
+      match Page.kind page |> Common.Kind.from_t with
       | Leaf ->
           let leaf = Leaf.load t.store address in
           Fmt.set_style_renderer ppf `Ansi_tty;
@@ -338,14 +336,12 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           let node = Node.load t.store address in
           Fmt.set_style_renderer ppf `Ansi_tty;
           Fmt.pf ppf "%a@." (Node.pp |> Fmt.vbox) node
-      | _ -> ()
 
     let go_to_leaf tree inkey =
       let key = Key.of_input inkey in
       let rec aux tree key address acc =
         let page = Store.load tree.store address in
-        match page |> Page.Header.load |> fun x -> x.kind with
-        | Overflow_leaf | Overflow_node -> failwith "Overflow page in B-tree"
+        match Page.kind page |> Common.Kind.from_t with
         | Leaf -> address :: acc
         | Node _depth ->
             let node = Node.load tree.store address in

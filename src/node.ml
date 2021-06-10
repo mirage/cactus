@@ -13,9 +13,15 @@ functor
 
     type key = Key.t
 
-    let encode_address = Address.of_int
+    type address = Store.address
 
-    let decode_address = Address.to_int
+    type store = Store.t
+
+    type kind = Field.kind
+
+    let encode_address = Address.to_t
+
+    let decode_address = Address.from_t
 
     type t = { store : Store.t; node : NodeFmt.t; address : Store.address }
 
@@ -57,6 +63,6 @@ functor
       NodeFmt.iter t.node f
 
     let fold_left func acc t =
-      let func acc (key, address) = func acc key (address |> Address.to_int) in
+      let func acc (key, address) = func acc key (address |> Address.from_t) in
       NodeFmt.fold_left func acc t.node
   end

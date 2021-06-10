@@ -29,17 +29,13 @@ module type K = sig
 
   val concat : t -> t -> t
 
-  val encode : t -> Encoder.t
-  (** [encode] is an encoding function. *)
+  val set : bytes -> off:int -> t -> unit
 
-  val decode : Encoder.t -> t
-  (** Must satisfy [decode (encode t) = t]. *)
+  val get : bytes -> off:int -> t
 
   val debug_dump : t -> string
 
   val pp : Format.formatter -> t -> unit
-
-  val pp_encoded : Format.formatter -> Encoder.t -> unit
 end
 
 module type V = sig
@@ -54,15 +50,18 @@ module type V = sig
 
   val to_input : t -> input_value
 
-  val encode : t -> Encoder.t
-  (** [encode] is an encoding function. *)
+  val set : bytes -> off:int -> t -> unit
 
-  val decode : Encoder.t -> t
-  (** Must satisfy [decode (encode t) = t]. *)
+  val get : bytes -> off:int -> t
 
+  (*
+     val encode : t -> Encoder.t
+     (** [encode] is an encoding function. *)
+
+     val decode : Encoder.t -> t
+     (** Must satisfy [decode (encode t) = t]. *)
+  *)
   val pp : Format.formatter -> t -> unit
-
-  val pp_encoded : Format.formatter -> Encoder.t -> unit
 end
 
 module type Entry = sig
@@ -116,9 +115,13 @@ functor
                 | _ -> None)
               (String.to_seq k1, String.to_seq k2))
 
-      let encode = Encoder.load
+      let set buff ~off t = Bytes.blit_string t 0 buff off size
 
-      let decode = Encoder.dump
+      let get buff ~off = Bytes.sub_string buff off size
+
+      let _encode = Encoder.load
+
+      let _decode = Encoder.dump
 
       let concat k1 k2 = k1 ^ k2
 
@@ -141,9 +144,6 @@ functor
             if 0x20 <= code && code <= 0x7E then c else '.')
 
       let pp ppf s = pf ppf "%a" (string |> styled (`Bg `Green) |> styled `Reverse) (ascii s)
-
-      let pp_encoded ppf encoded =
-        pf ppf "%a%a" (Encoder.pp |> styled (`Bg `Green)) encoded pp (encoded |> decode)
     end
 
     module Value = struct
@@ -153,9 +153,13 @@ functor
 
       let size = InValue.encoded_size
 
-      let encode s = Encoder.encode_string s
+      let set buff ~off t = Bytes.blit_string t 0 buff off size
 
-      let decode = Encoder.decode_string
+      let get buff ~off = Bytes.sub_string buff off size
+
+      let _encode s = Encoder.encode_string s
+
+      let _decode = Encoder.decode_string
 
       let of_input v =
         let ret = InValue.encode v in
@@ -167,8 +171,5 @@ functor
       open Fmt
 
       let pp = string |> styled (`Bg `Blue) |> styled `Reverse
-
-      let pp_encoded ppf encoded =
-        pf ppf "%a%a" (Encoder.pp |> styled (`Bg `Blue)) encoded pp (encoded |> decode)
     end
   end

@@ -1,139 +1,78 @@
-module type _COMMON = sig
-  type t [@@deriving repr]
+include Field_intf
 
-  val encode : t -> Encoder.t
+type kind = _kind [@@deriving repr]
 
-  val decode : Encoder.t -> t
-
-  val size : int
-
-  val pp : Format.formatter -> t -> unit
-end
-
-module type STRING = sig
-  include _COMMON
-
-  val decode : Encoder.t -> size:int -> t
-
-  val dump : t -> Encoder.t (* like encode but without padding *)
-end
-
-module type INT = sig
-  include _COMMON
-
-  val to_int : t -> int
-
-  val of_int : int -> t
-end
-
-module type BOOL = sig
-  include _COMMON
-
-  val to_bool : t -> bool
-
-  val of_bool : bool -> t
-end
-
-module type BOOLS = sig
-  include _COMMON
-
-  val to_bools : t -> bool list
-
-  val of_bools : bool list -> t
-end
-
-module type SIZE = sig
-  val size : int
-end
-
-module MakeString (Size : SIZE) : STRING = struct
-  type t = string [@@deriving repr]
-
-  let size = Size.size
-
-  let encode s = Encoder.encode_string ~pad:size s
-
-  let decode e ~size =
-    let s = Encoder.dump e in
-    String.sub s (String.length s - size) size
-
-  let dump s = Encoder.load s
-
-  let pp = Fmt.string
-end
-
-module MakeInt (Size : SIZE) : INT = struct
+module MakeInt (Size : SIZE) = struct
   type t = int [@@deriving repr]
 
   let size = Size.size
 
-  let encode = Encoder.encode_int ~pad:size
+  let get, set =
+    match size with
+    | 1 -> Bytes.((fun b ~off -> get_uint8 b off), fun b ~off -> set_uint8 b off)
+    | 2 -> Bytes.((fun b ~off -> get_uint16_be b off), fun b ~off -> set_uint16_be b off)
+    | 4 ->
+        Bytes.
+          ( (fun b ~off -> get_int32_be b off |> Int32.to_int),
+            fun b ~off t -> t |> Int32.of_int |> set_int32_be b off )
+    | 8 ->
+        Bytes.
+          ( (fun b ~off -> get_int64_be b off |> Int64.to_int),
+            fun b ~off t -> t |> Int64.of_int |> set_int64_be b off )
+    | n -> failwith (Fmt.str "Unsupported int length %i" n)
 
-  let decode = Encoder.decode_int
+  let from_t = Fun.id
 
-  let to_int i = i
-
-  let of_int i = i
+  let to_t = Fun.id
 
   let pp = Fmt.int
+
+  let pp_raw ppf buff ~off =
+    Bytes.sub_string buff off size |> Hex.of_string |> Hex.show |> Fmt.string ppf
 end
 
-module MakeBool (Size : SIZE) : BOOL = struct
+module MakeBool (Size : SIZE) = struct
   type t = bool [@@deriving repr]
 
   let size = Size.size
 
-  let encode = Encoder.encode_bool ~pad:size
+  let set b ~off t = Bytes.set b off (if t then '\255' else '\254')
 
-  let decode = Encoder.decode_bool
+  let get b ~off =
+    match Bytes.get b off with
+    | '\255' -> true
+    | '\254' -> false
+    | c -> Fmt.str "Unknown bool with code %i" (Char.code c) |> failwith
 
-  let to_bool b = b
+  let from_t = Fun.id
 
-  let of_bool b = b
+  let to_t = Fun.id
 
   let pp = Fmt.bool
+
+  let pp_raw ppf buff ~off =
+    Bytes.sub_string buff off size |> Hex.of_string |> Hex.show |> Fmt.string ppf
 end
 
-module MakeBools (N : sig
-  val n : int
-end) : BOOLS = struct
-  type t = bool list [@@deriving repr]
+module MakeString (Size : SIZE) = struct
+  type t = string [@@deriving repr]
 
-  let size = ((N.n - 1) lsr 3) + 1
+  let size = Size.size
 
-  let encode = Encoder.encode_bools N.n
+  let set b ~off t =
+    assert (String.length t = size);
+    Bytes.blit_string t 0 b off size
 
-  let decode = Encoder.decode_bools N.n
+  let get b ~off = Bytes.sub_string b off size
 
-  let to_bools bs =
-    assert (List.length bs = N.n);
-    bs
+  let from_t = Fun.id
 
-  let of_bools bs =
-    assert (List.length bs = N.n);
-    bs
+  let to_t = Fun.id
 
-  let pp = Fmt.list Fmt.bool
-end
+  let pp = Fmt.string
 
-type kind = Leaf | Overflow_leaf | Overflow_node | Node of int [@@deriving repr]
-
-module type COMMON = sig
-  module Version : INT
-
-  module Magic : STRING
-
-  module Address : INT
-
-  module Flag : BOOL
-
-  module Kind : sig
-    include INT with type t = kind
-
-    val of_depth : int -> t (* kind of a node from its distance to the leaves *)
-
-    val to_depth : t -> int (* distance to the leaves of a node, from its kind *)
-  end
+  let pp_raw ppf buff ~off =
+    Bytes.sub_string buff off size |> Hex.of_string |> Hex.show |> Fmt.string ppf
 end
 
 module MakeCommon (Params : Params.S) : COMMON = struct
@@ -149,6 +88,12 @@ module MakeCommon (Params : Params.S) : COMMON = struct
     let size = Params.page_address_sz
   end)
 
+  module Pointer = MakeInt (struct
+    let minimal_size = Params.page_sz |> Fmt.str "%x" |> String.length |> fun x -> (x + 1) / 2
+
+    let size = [ 1; 2; 4; 8 ] |> List.filter (( <= ) minimal_size) |> List.hd
+  end)
+
   module Flag = MakeBool (struct
     let size = Params.flag
   end)
@@ -158,23 +103,31 @@ module MakeCommon (Params : Params.S) : COMMON = struct
 
     let size = Params.tree_height_sz
 
-    let of_int i =
-      if i = 0 then Overflow_leaf
-      else if i = 1 then Overflow_node
-      else if i = 2 then Leaf
-      else Node (i - 2)
+    let of_depth n = if n = 0 then Leaf else Node n
 
-    let to_int kind =
-      match kind with Overflow_leaf -> 0 | Overflow_node -> 1 | Leaf -> 2 | Node n -> 2 + n
+    let to_depth t = match t with Leaf -> 0 | Node n -> n
 
-    let of_depth i = if i = 0 then Leaf else Node i
+    module AsInt = MakeInt (struct
+      let size = size
+    end)
 
-    let to_depth kind = match kind with Leaf -> 0 | Node n -> n | _ -> -1
+    let of_int i = if i = 0 then Leaf else Node i
+    (* this could change if we added more variants to [kind] *)
 
-    let decode s = s |> Encoder.decode_int |> of_int
+    let to_int t = match t with Leaf -> 0 | Node n -> n
+    (* this could change if we added more variants to [kind] *)
 
-    let encode kind = kind |> to_int |> Encoder.encode_int ~pad:size
+    let from_t = Fun.id
+
+    let to_t = Fun.id
+
+    let get b ~off = AsInt.get b ~off |> of_int
+
+    let set b ~off t = t |> to_int |> AsInt.set b ~off
 
     let pp = Repr.pp t
+
+    let pp_raw ppf buff ~off =
+      Bytes.sub_string buff off size |> Hex.of_string |> Hex.show |> Fmt.string ppf
   end
 end
