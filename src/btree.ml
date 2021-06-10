@@ -1,5 +1,3 @@
-exception NotFinished
-
 include Btree_intf
 
 let ( // ) a b = a ^ "/" ^ b
@@ -79,7 +77,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             close_out out_file
     in
     flush t;
-    Store.iter t.store func;
+    Store.iter t.store snap_page;
     let out_header = open_out (Store.Private.dir t.store // "pp_header.ansi") in
     let formatter = out_header |> Format.formatter_of_out_channel in
     Fmt.set_style_renderer formatter `Ansi_tty;
