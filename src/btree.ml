@@ -15,7 +15,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   module Entry = Data.Make (InKey) (InValue)
   module Key = Entry.Key
   module Value = Entry.Value
-  module Store = Store.Make (Params)
+  module Store = Store.Make (Params) (Common)
   module Page = Store.Page
   module Leaf = Leaf.Make (Params) (Store) (Key) (Value)
   module Node = Node.Make (Params) (Store) (Key)

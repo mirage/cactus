@@ -13,13 +13,6 @@ module type S = sig
 
     type pointer = int (* offset inside a page*)
 
-    module Header : sig
-      type h = { magic : Common.Magic.t; kind : Common.Kind.t; version : Common.Version.t }
-
-      val load : t -> h
-
-      val pp_raw : Format.formatter -> t -> unit
-    end
 
     val write : t -> ?with_flush:bool -> offset:pointer -> Encoder.t -> unit
 
@@ -71,7 +64,8 @@ module type S = sig
   end
 end
 
-module type MAKER = functor (Params : Params.S) -> S with module Common = Field.MakeCommon(Params)
+module type MAKER = functor (Params : Params.S) (Common : Field.COMMON) ->
+  S with module Common = Common
 
 module type Store = sig
   module type S = S

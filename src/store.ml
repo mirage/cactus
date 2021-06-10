@@ -162,9 +162,8 @@ end = struct
     release t
 end
 
-module Make (Params : Params.S) = struct
-  module Common = Field.MakeCommon (Params)
-  module BtreeHeader = MakeHeader (Common) (Params)
+module Make (Params : Params.S) (Common : Field.COMMON) = struct
+  module Common = Common
 
   open Stats.Func
   (** STAT WRAPPERS **)
