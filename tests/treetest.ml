@@ -23,6 +23,22 @@ let test_addition version n () =
     MyBtree.add tree key (0, 0, 0)
   done
 
+let test_removal version n () =
+  let module MyBtree = (val get_tree version) in
+  let root = v_to_s version // Format.sprintf "tree_remove_%i" n in
+  let tree = MyBtree.create ~root in
+  let keys = Array.init (n + 1) (fun _ -> generate_key ()) in
+  for i = 1 to n do
+    MyBtree.add tree keys.(i) (0, 0, 0);
+    if i mod 2 = 1 then MyBtree.remove tree keys.(i)
+  done;
+  for i = 1 to n / 2 do
+    Fmt.pr "[%i] %s@." (2 * i) keys.(2 * i);
+    if i = 357 then MyBtree.snapshot tree;
+    MyBtree.remove tree keys.(2 * i)
+  done;
+  Alcotest.(check int) "Checking that the tree is empty" 0 (MyBtree.length tree)
+
 let test_mem version n () =
   let module MyBtree = (val get_tree version) in
   let root = v_to_s version // Format.sprintf "tree_mem_%i" n in
@@ -130,18 +146,24 @@ let test_length version n () =
 let suite version =
   ( Fmt.str "%s tree" (v_to_s version),
     [
-      ("Single creation", `Quick, test_single_creation version);
-      ("Creation", `Quick, test_creation version);
-      ("Small addition", `Quick, test_addition version 100);
-      ("Small mem", `Quick, test_mem version 100);
-      ("Small retrieval", `Quick, test_retrieval version 100);
-      ("Addition", `Quick, test_addition version 1000);
-      ("Mem", `Quick, test_mem version 1000);
-      ("Retrieval", `Quick, test_retrieval version 1000);
-      ("Clear", `Quick, test_clear version 1000);
-      ("Snapshot", `Quick, test_snapshot version);
-      ("Huge addition", `Slow, test_addition version 100_000);
-      ("Huge retrieval", `Slow, test_retrieval version 100_000);
-      ("Redundant additions", `Quick, test_redundant version 1000);
-      ("Length", `Quick, test_length version 51_415);
+      (* ("Single creation", `Quick, test_single_creation version);
+         ("Creation", `Quick, test_creation version);
+      *)
+      (*
+         ("Small addition", `Quick, test_addition version 100);
+         ("Small mem", `Quick, test_mem version 100);
+         ("Small retrieval", `Quick, test_retrieval version 100); *)
+      (* ("Addition", `Quick, test_addition version 1000);
+         ("Mem", `Quick, test_mem version 1000);
+      *)
+      (*
+         ("Retrieval", `Quick, test_retrieval version 1000);
+         ("Length", `Quick, test_length version 1_415); *)
+      ("Removal", `Quick, test_removal version 1000);
+      (* ("Clear", `Quick, test_clear version 1000);
+            ("Snapshot", `Quick, test_snapshot version);
+            ("Huge addition", `Slow, test_addition version 100_000);
+            ("Huge retrieval", `Slow, test_retrieval version 100_000);
+
+         ("Redundant additions", `Quick, test_redundant version 1000); *)
     ] )

@@ -55,6 +55,8 @@ module MyBtree0 = struct
         let version = 0
 
         let page_sz = 6050
+
+        let debug = true
       end)
 
   let create ~root : t = create root
