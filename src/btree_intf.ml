@@ -29,13 +29,13 @@ module type S = sig
 
   val add : t -> key -> value -> unit
 
+  val remove : t -> key -> unit
+
   val find : t -> key -> value
 
   val mem : t -> key -> bool
 
   val clear : t -> unit
-
-  val delete : t -> key -> unit
 
   val flush : t -> unit
 

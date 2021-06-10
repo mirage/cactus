@@ -13,10 +13,7 @@ module type S = sig
 
     type pointer = int (* offset inside a page*)
 
-
-    val write : t -> ?with_flush:bool -> offset:pointer -> Encoder.t -> unit
-
-    val read : t -> offset:pointer -> length:int -> Encoder.t
+    val kind : t -> Common.Kind.t
 
     val buff : t -> bytes
 
@@ -44,6 +41,8 @@ module type S = sig
       the loaded one have not been written on. This cleans the store cache without flushing.*)
 
   val allocate : t -> address
+
+  val deallocate : t -> address -> unit
 
   val flush : t -> unit
 

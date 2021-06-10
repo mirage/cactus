@@ -5,74 +5,28 @@ include Store_intf
 
 exception Page_overflow
 
-module MakeHeader (Common : Field.COMMON) (Params : Params.S) = struct
-  (* store header *)
+module type HEADER = sig
+  module Common : Field.COMMON
 
-  type t = {
-    magic : Common.Magic.t;
-    mutable root : Common.Address.t;
-    mutable lock_tbl : Common.Address.t;
-    mutable dead_tbl : Common.Address.t;
-  }
+  type t
 
-  let init () =
-    {
-      magic =
-        Params.page_magic
-        |> Encoder.load
-        |> Common.Magic.decode ~size:(String.length Params.page_magic);
-      root = Common.Address.of_int (-1);
-      lock_tbl = Common.Address.of_int (-1);
-      dead_tbl = Common.Address.of_int (-1);
-    }
+  val size : int
 
-  let sizes = [ Common.Magic.size; Common.Address.size; Common.Address.size; Common.Address.size ]
+  val load : bytes -> t
 
-  let offsets = Utils.sizes_to_offsets sizes
+  val dump : t -> bytes
 
-  let size = List.fold_left ( + ) 0 sizes
+  val init : t -> root:int -> unit
 
-  let load s =
-    match List.fold_right2 (fun off len acc -> Encoder.sub s off len :: acc) offsets sizes [] with
-    | [ magic; root; lock_tbl; dead_tbl ] ->
-        {
-          magic = Common.Magic.decode ~size:(String.length Params.page_magic) magic;
-          root = Common.Address.decode root;
-          lock_tbl = Common.Address.decode lock_tbl;
-          dead_tbl = Common.Address.decode dead_tbl;
-        }
-    | _ -> failwith "this cannot happen -- famous last words."
+  val pp : Format.formatter -> t -> unit
 
-  let dump { magic; root; lock_tbl; dead_tbl } =
-    Encoder.concat
-      [
-        Common.Magic.encode magic;
-        Common.Address.encode root;
-        Common.Address.encode lock_tbl;
-        Common.Address.encode dead_tbl;
-      ]
+  (* val g_magic : t -> Common.Magic.t
 
-  let pp ppf (header : t) =
-    let open Fmt in
-    let magic = Common.Magic.encode header.magic in
-    let root = Common.Address.encode header.root in
-    let lock_tbl = Common.Address.encode header.lock_tbl in
-    let dead_tbl = Common.Address.encode header.dead_tbl in
+     val s_magic : t -> Common.Magic.t -> unit *)
 
-    let encoder_pp = Encoder.pp |> styled (`Fg `Magenta) in
-    pf ppf
-      "@[<hov 1>magic:@ %a%a@]@;\
-       @[<hov 1>root:@ %a%a@]@;\
-       @[<hov 1>locks:@ %a%a@]@;\
-       @[<hov 1>deads:@ %a%a@]@]" encoder_pp magic
-      (Common.Magic.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-      header.magic encoder_pp root
-      (Common.Address.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-      header.root encoder_pp lock_tbl
-      (Common.Address.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-      header.lock_tbl encoder_pp dead_tbl
-      (Common.Address.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-      header.dead_tbl
+  val g_root : t -> Common.Address.t
+
+  val s_root : t -> Common.Address.t -> unit
 end
 
 module CaliforniaCache : sig
@@ -165,6 +119,46 @@ end
 module Make (Params : Params.S) (Common : Field.COMMON) = struct
   module Common = Common
 
+  module Header : HEADER with module Common := Common = struct
+    type t = bytes
+
+    open Common
+
+    let sizes = [ Magic.size; Address.size ]
+
+    type offsets = { magic : int; root : int }
+
+    let offsets =
+      match Utils.sizes_to_offsets sizes with
+      | [ magic; root ] -> { magic; root }
+      | _ -> failwith "Incorrect offsets"
+
+    let size = List.fold_left ( + ) 0 sizes
+
+    let load buff = buff
+
+    let g_magic t = Magic.get t ~off:offsets.magic
+
+    let s_magic t magic = Magic.set t ~off:offsets.magic magic
+
+    let g_root t = Address.get t ~off:offsets.root
+
+    let s_root t root = Address.set t ~off:offsets.root root
+
+    let init t ~root =
+      s_magic t @@ Magic.to_t @@ Params.page_magic;
+      s_root t @@ Address.to_t @@ root
+
+    let pp ppf t =
+      Fmt.pf ppf "@[<v 2>Header:@;Magic:%a@;Root:%a@]" Magic.pp (g_magic t) Address.pp (g_root t)
+
+    let dump t = t
+
+    let () =
+      ignore g_magic;
+      ignore s_magic
+  end
+
   open Stats.Func
   (** STAT WRAPPERS **)
 
@@ -176,7 +170,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
   type t = {
     mutable n_pages : int;
-    header : BtreeHeader.t;
+    mutable dead_pages : int list;
+    header : Header.t;
     fd : Unix.file_descr;
     dir : string;
     cache : (address, content) CaliforniaCache.t;
@@ -215,27 +210,17 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
             ~fd_offset:(real_offset address |> Optint.Int63.of_int)
             ~buffer:content.buff ~buffer_offset:0 ~length:max_size
         in
-        (* ignore (Unix.lseek fd (real_offset address) Unix.SEEK_SET);
-           let write_size = Unix.write fd content.buff 0 max_size in
-        *)
         assert (write_size = max_size);
         tac stat_io_w;
         increment stat_io_w "nb_bytes" max_size)
 
     let flush t = _flush t.store.fd t.address t.content
 
-    let read t ~offset ~length =
-      tic stat_read;
-      let ret = Bytes.sub_string t.content.buff offset length |> Encoder.load in
-      tac stat_read;
-      ret
-
-    let write t ?(with_flush = false) ~offset s =
+    let write t ?(with_flush = false) ~offset buff =
       tic stat_write;
-      if offset + Encoder.length s > max_size then raise Page_overflow;
+      if offset + Bytes.length buff > max_size then raise Page_overflow;
       t.content.dirty <- true;
-      let s = Encoder.dump s in
-      Bytes.blit_string s 0 t.content.buff offset (String.length s);
+      Bytes.blit buff 0 t.content.buff offset (Bytes.length buff);
       if with_flush then flush t;
       tac stat_write
 
@@ -257,38 +242,20 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       tac stat_io_w;
       increment stat_io_w "nb_bytes" max_size
 
-    module Header = struct
-      type h = { magic : Common.Magic.t; kind : Common.Kind.t; version : Common.Version.t }
+    (* Header functions *)
 
-      let sizes = Common.[ Magic.size; Kind.size; Version.size ]
+    type offsets = { magic : int; kind : int }
 
-      let size = List.fold_left ( + ) 0 sizes
+    let sizes = Common.[ Magic.size; Kind.size ]
 
-      let offsets = Utils.sizes_to_offsets sizes
+    let offsets =
+      match Utils.sizes_to_offsets sizes with
+      | [ magic; kind ] -> { magic; kind }
+      | _ -> failwith "Invalid offsets"
 
-      let kind content =
-        let offset = List.nth offsets 1 in
-        Bytes.sub_string content.buff offset Common.Kind.size |> Encoder.load |> Common.Kind.decode
+    let _kind content = Common.Kind.get content.buff ~off:offsets.kind
 
-      let load t =
-        let full_header = read t ~offset:0 ~length:size in
-        match
-          List.fold_right2
-            (fun off len acc -> Encoder.sub full_header off len :: acc)
-            offsets sizes []
-        with
-        | [ magic; kind; version ] ->
-            {
-              magic = Common.Magic.decode ~size:(String.length Params.page_magic) magic;
-              kind = Common.Kind.decode kind;
-              version = Common.Version.decode version;
-            }
-        | _ -> failwith "this will not happen -- famous last words"
-
-      let pp_raw ppf t =
-        let full_header = read t ~offset:0 ~length:size in
-        Fmt.pf ppf "Header : %s" (full_header |> Encoder.dump |> Hex.of_string |> Hex.show)
-    end
+    let kind t = _kind t.content
   end
 
   let fsync t =
@@ -314,16 +281,26 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
   let allocate t =
     tic stat_allocate;
-    let n = t.n_pages in
-    Page.init t n (* write junk bytes to increase the b.tree file length *);
-    t.n_pages <- n + 1;
+    let ret =
+      match t.dead_pages with
+      | [] ->
+          let n = t.n_pages in
+          Page.init t n (* write junk bytes to increase the b.tree file length *);
+          t.n_pages <- n + 1;
+          n
+      | r :: q ->
+          t.dead_pages <- q;
+          r
+    in
     tac stat_allocate;
-    n
+    ret
+
+  let deallocate t address = t.dead_pages <- address :: t.dead_pages
 
   let rewrite_header t =
     (* page 0 is reserved for the header *)
     let page = load t 0 in
-    Page.write page ~with_flush:true ~offset:0 (BtreeHeader.dump t.header);
+    Page.write page ~with_flush:true ~offset:0 (Header.dump t.header);
     fsync t
 
   let mkdir dirname =
@@ -346,43 +323,50 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let ( // ) x y = x ^ "/" ^ y in
     if not (Sys.file_exists root) then mkdir root;
     let file = root // "b.tree" in
+
     if Sys.file_exists file then (
       Log.debug (fun reporter -> reporter "Loading btree file found at %s" file);
+
       let fd = Unix.openfile file Unix.[ O_RDWR ] 0o600 in
+
+      let buff = Bytes.create Header.size in
       Unix.lseek fd 0 Unix.SEEK_SET |> ignore;
-      let buff = Bytes.create BtreeHeader.size in
-      Utils.assert_read fd buff 0 BtreeHeader.size;
-      let header = buff |> Bytes.to_string |> Encoder.load |> BtreeHeader.load in
+      Utils.assert_read fd buff 0 Header.size;
+      let header = Header.load buff in
+
       let file_size = fd |> Unix.fstat |> fun x -> x.st_size in
       let n_pages = file_size / Params.page_sz in
+
       let tree_height =
-        header.root
-        |> Common.Address.to_int
+        Header.g_root header
+        |> Common.Address.from_t
         |> Page.load fd
-        |> Page.Header.kind
+        |> Page._kind
         |> Common.Kind.to_depth
       in
+
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
           ~filter:(fun content ->
-            Page.Header.kind content |> Common.Kind.to_depth |> fun x ->
-            tree_height - x <= cache_height)
+            Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height)
+          (* only cache the top cache_height part of the tree *)
           Params.cache_sz
       in
-      { n_pages; header; fd; dir = root; cache })
+
+      { n_pages; dead_pages = []; header; fd; dir = root; cache })
     else
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
-          ~filter:(fun content -> Page.Header.kind content |> Common.Kind.to_depth |> fun _ -> true)
+          ~filter:(fun content -> Page._kind content |> Common.Kind.to_depth |> fun _ -> true)
           Params.cache_sz
       in
-      let store = { n_pages = 0; header = BtreeHeader.init (); fd; dir = root; cache } in
-      ignore (allocate store);
-      (* create page_0 for the header *)
-      store.header.lock_tbl <- allocate store |> Common.Address.of_int;
-      store.header.dead_tbl <- allocate store |> Common.Address.of_int;
-      store.header.root <- allocate store |> Common.Address.of_int;
+      let header = Bytes.create Header.size |> Header.load in
+      let store = { n_pages = 0; dead_pages = []; header; fd; dir = root; cache } in
+
+      ignore (allocate store) (* create page_0 for the header *);
+      let root = allocate store in
+      Header.init header ~root;
       rewrite_header store;
       store
 
@@ -390,38 +374,37 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     t.n_pages <- 0;
     ignore (allocate t);
     (* create page_0 for the header *)
-    t.header.lock_tbl <- allocate t |> Common.Address.of_int;
-    t.header.dead_tbl <- allocate t |> Common.Address.of_int;
-    t.header.root <- allocate t |> Common.Address.of_int;
+    allocate t |> Common.Address.to_t |> Header.s_root t.header;
     rewrite_header t;
     fsync t;
     CaliforniaCache.full_clear t.cache
 
-  let root t = t.header.root |> Common.Address.to_int
+  let root t = Header.g_root t.header |> Common.Address.from_t
 
   let reroot t address =
     ignore CaliforniaCache.update_filter;
-    t.header.root <- address |> Common.Address.of_int;
+    address |> Common.Address.to_t |> Header.s_root t.header;
     rewrite_header t;
-    let tree_height =
-      address |> load t |> Page.Header.load |> fun x -> Common.Kind.to_depth x.kind
-    in
+    let tree_height = address |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
     if tree_height > cache_height then (
       Log.warn (fun reporter ->
           reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height));
 
       CaliforniaCache.update_filter t.cache ~filter:(fun content ->
-          Page.Header.kind content |> Common.Kind.to_depth |> fun x ->
-          tree_height - x <= cache_height));
+          Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height));
 
+    (* only cache the top cache_height part of the tree *)
     fsync t
 
-  let iter store func =
-    for i = 3 to store.n_pages - 1 do
-      load store i |> func i
+  let iter t func =
+    for i = 1 to t.n_pages - 1 do
+      load t i |> func i
     done
 
-  let pp_header ppf store = Fmt.pf ppf "@[<v>%a@]" BtreeHeader.pp store.header
+  let pp_header ppf t =
+    Fmt.pf ppf "@[<v 2>Header:@;%a@]@;@[Deallocated pages:@;%a@]" Header.pp t.header
+      Fmt.(list int)
+      t.dead_pages
 
   module Private = struct
     let dir t = t.dir

@@ -14,6 +14,10 @@ functor
 
     type value = Value.t
 
+    type store = Store.t
+
+    type address = Store.address
+
     type t = { store : Store.t; leaf : LeafFmt.t; address : Store.address }
 
     let pp ppf t = LeafFmt.pp ppf t.leaf
@@ -37,8 +41,16 @@ functor
 
     let split t =
       let address = Store.allocate t.store in
-      let k, leaf = LeafFmt.split t.leaf t.store address in
+      let k, leaf = LeafFmt.split t.leaf address in
       (k, { store = t.store; leaf; address })
+
+    let merge t1 t2 =
+      let partial = LeafFmt.length t1.leaf + LeafFmt.length t2.leaf >= 2 * Params.fanout in
+      LeafFmt.merge t1.leaf t2.leaf (if partial then `Partial else `Total);
+      if not partial then Store.deallocate t2.store t2.address;
+      if partial then `Partial else `Total
+
+    let leftmost t = LeafFmt.leftmost t.leaf
 
     let find t key = LeafFmt.find t.leaf key
 
@@ -46,7 +58,7 @@ functor
 
     let add t key value = LeafFmt.add t.leaf key value
 
-    let delete t key = LeafFmt.remove t.leaf key
+    let remove t key = LeafFmt.remove t.leaf key
 
     let iter t func =
       let f key value = func key value in

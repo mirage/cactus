@@ -169,6 +169,19 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
     aux [] (Store.root t.store)
 
+  let path_to_leaf_with_neighbour t key =
+    let rec aux path_with_neighbour address =
+      let page = Store.load t.store address in
+      match Page.kind page |> Common.Kind.from_t with
+      | Leaf -> (address, path_with_neighbour)
+      | Node _depth ->
+          let node = Node.load t.store address in
+          let neighbour = Node.find_with_neighbour node key in
+          let next = neighbour.main |> snd in
+          aux ((address, neighbour) :: path_with_neighbour) next
+    in
+    aux [] (Store.root t.store)
+
   let add tree inkey invalue =
     tic stat_add;
     let key = Key.of_input inkey in
@@ -215,7 +228,63 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Store.release tree.store;
     tac stat_add
 
-  let delete _tree _key = raise NotFinished
+  module type MERGER = sig
+    type t
+
+    val load : Store.t -> Store.address -> t
+
+    val leftmost : t -> Key.t
+
+    val merge : t -> t -> [ `Partial | `Total ]
+  end
+
+  let choose_kind t address =
+    match Store.load t.store address |> Page.kind |> Common.Kind.from_t with
+    | Leaf -> (module Leaf : MERGER)
+    | Node _ -> (module Node)
+
+  let remove t inkey =
+    let rec merges path =
+      match path with
+      | [] -> ()
+      | (address, ({ main; neighbour; order } : Node.neighbour)) :: path -> (
+          match neighbour with
+          | None ->
+              if not (path = []) then failwith "No neighbour";
+              (* we are at the root, which contains only a single key and acts as a mere redirection. We want to remove it and make its only child the new root*)
+              Store.reroot t.store (snd main);
+              Log.info (fun reporter ->
+                  reporter "Btree height decreases to %i"
+                    (Store.load t.store (snd main) |> Page.kind |> Common.Kind.to_depth))
+          | Some neighbour ->
+              let node = Node.load t.store address in
+              let k1, address1 = main in
+              let k2, address2 = neighbour in
+              let module Merger = (val choose_kind t address1) in
+              let v1, v2 = Merger.(load t.store address1, load t.store address2) in
+              (match order with
+              | `Lower -> (
+                  match Merger.merge v2 v1 with
+                  | `Partial ->
+                      Fmt.pr "Replacing %a with %a@." Key.pp k1 Key.pp (Merger.leftmost v1);
+                      Node.replace node k1 (Merger.leftmost v1)
+                  | `Total ->
+                      Fmt.pr "key : %a@." Key.pp k1;
+                      Node.remove node k1)
+              | `Higher -> (
+                  match Merger.merge v1 v2 with
+                  | `Partial ->
+                      Fmt.pr "Replacing %a with %a@." Key.pp k2 Key.pp (Merger.leftmost v2);
+                      Node.replace node k2 (Merger.leftmost v2)
+                  | `Total -> Node.remove node k2));
+              if Node.underflow node then merges path)
+    in
+    let key = Key.of_input inkey in
+    let leaf_address, path = path_to_leaf_with_neighbour t key in
+    let leaf = Leaf.load t.store leaf_address in
+    Leaf.remove leaf key;
+    if Leaf.underflow leaf then merges path;
+    Store.release t.store
 
   let iter func tree =
     let func key value = func (key |> Key.to_input) (value |> Value.to_input) in

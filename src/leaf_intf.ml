@@ -27,13 +27,17 @@ module type S = sig
   (** [split leaf] allocates a new leaf to split to, splits [leaf], promotes the middle key, and
       returns [promoted, allocated] *)
 
+  val merge : t -> t -> [ `Partial | `Total ]
+
   val find : t -> key -> value
+
+  val leftmost : t -> key
 
   val mem : t -> key -> bool
 
   val add : t -> key -> value -> unit
 
-  val delete : t -> key -> unit
+  val remove : t -> key -> unit
 
   val iter : t -> (key -> value -> unit) -> unit
 
@@ -49,8 +53,8 @@ module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K)
   S
     with type value = Value.t
      and type key = Key.t
-     and type store := Store.t
-     and type address := Store.address
+     and type store = Store.t
+     and type address = Store.address
 
 module type Leaf = sig
   module type S = S

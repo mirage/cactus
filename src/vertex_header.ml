@@ -1,98 +1,73 @@
-module type H = sig
-  module Common : Header.Common (* module where live header fields common to all pages *)
+include Vertex_header_intf
 
-  module Entry_number : Header.IntHeaderField
+module Make (Params : Params.S) (Store : Store.S) (Common : Field.COMMON) = struct
+  open Common
 
-  module Dead_entry_number : Header.IntHeaderField
+  module Nentry = Field.MakeInt (struct
+    let size = Params.max_key_sz
+  end)
 
-  type t = {
-    magic : Common.Magic.t;
-    kind : Common.Kind.t;
-    version : Common.Version.t;
-    entry_number : Entry_number.t;
-  }
+  module Ndeadentry = Field.MakeInt (struct
+    let size = Params.max_key_sz
+  end)
 
-  val load : bytes -> t
+  type t = bytes
 
-  val init : Field.kind -> bytes -> t
+  type offsets = { magic : int; kind : int; nentry : int; ndeadentry : int }
 
-  val size : int
+  let sizes = [ Magic.size; Kind.size; Nentry.size; Ndeadentry.size ]
 
-  val pp : Format.formatter -> t -> unit (* human readable representation, for debugging *)
-end
+  let offsets =
+    match Utils.sizes_to_offsets sizes with
+    | [ magic; kind; nentry; ndeadentry ] -> { magic; kind; nentry; ndeadentry }
+    | _ -> failwith "Incorrect offsets"
 
-module type MAKER = functor (Params : Params.S) (Store : Store.S) ->
-  H with module Common = Header.MakeCommon(Params)
+  let size = List.fold_left ( + ) 0 sizes
 
-module Make : MAKER =
-functor
-  (Params : Params.S)
-  (Store : Store.S)
-  ->
-  struct
-    module Common = Header.MakeCommon (Params)
+  let load buff = buff
 
-    module Entry_number = Header.MakeInt (struct
-      let size = Params.max_key_sz
-    end)
+  let init t kind =
+    Magic.to_t Params.page_magic |> Magic.set t ~off:offsets.magic;
+    Kind.to_t kind |> Kind.set t ~off:offsets.kind;
+    Nentry.to_t 0 |> Nentry.set t ~off:offsets.nentry
 
-    module Dead_entry_number = Header.MakeInt (struct
-      let size = Params.max_key_sz
-    end)
+  let g_magic t = Magic.get t ~off:offsets.magic
 
-    type t = {
-      magic : Common.Magic.t;
-      kind : Common.Kind.t;
-      version : Common.Version.t;
-      entry_number : Entry_number.t;
-    }
+  let s_magic t magic = Magic.set t ~off:offsets.magic magic
 
-    let sizes = [ Common.Magic.size; Common.Kind.size; Common.Version.size; Entry_number.size ]
+  let g_kind t = Kind.get t ~off:offsets.kind
 
-    let offsets = Utils.sizes_to_offsets sizes
+  let s_kind t kind = Kind.set t ~off:offsets.kind kind
 
-    let size = List.fold_left ( + ) 0 sizes
+  let g_nentry t = Nentry.get t ~off:offsets.nentry
 
-    let load buff =
-      match offsets with
-      | [ magic; kind; version; entry_number ] ->
-          {
-            magic = Common.Magic.v buff ~off:magic;
-            kind = Common.Kind.v buff ~off:kind;
-            version = Common.Version.v buff ~off:version;
-            entry_number = Entry_number.v buff ~off:entry_number;
-          }
-      | _ -> failwith "Incorrect node header"
+  let s_nentry t nentry = Nentry.set t ~off:offsets.nentry nentry
 
-    let init (as_kind : Field.kind) buff =
-      let t = load buff in
-      Common.Magic.set t.magic Params.page_magic;
-      Common.Kind.set t.kind as_kind;
-      Common.Version.set t.version 2;
-      Entry_number.set t.entry_number 0;
+  let g_ndeadentry t = Ndeadentry.get t ~off:offsets.ndeadentry
+
+  let s_ndeadentry t ndeadentry = Ndeadentry.set t ~off:offsets.ndeadentry ndeadentry
+
+  let pp ppf t =
+    let open Fmt in
+    pf ppf
+      "@[<hov 1>magic:@ %a%a@]@;\
+       @[<hov 1>kind:@ %a%a@]@;\
+       @[<hov 1>entry number:@ %a%a@]@;\
+       @[<hov 1>dead entry number:@ %a%a@]"
+      (Magic.pp_raw ~off:offsets.magic |> styled (`Fg `Magenta))
       t
-
-    let pp ppf (t : t) =
-      let open Fmt in
-      pf ppf
-        "@[<hov 1>magic:@ %a%a@]@;\
-         @[<hov 1>kind:@ %a%a@]@;\
-         @[<hov 1>version:@ %a%a@]@;\
-         @[<hov 1>entry_number:@ %a%a@]"
-        (Common.Magic.pp_raw |> styled (`Fg `Magenta))
-        t.magic
-        (Common.Magic.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-        t.magic
-        (Common.Kind.pp_raw |> styled (`Fg `Magenta))
-        t.kind
-        (Common.Kind.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-        t.kind
-        (Common.Version.pp_raw |> styled (`Fg `Magenta))
-        t.version
-        (Common.Version.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-        t.version
-        (Entry_number.pp_raw |> styled (`Fg `Magenta))
-        t.entry_number
-        (Entry_number.pp |> styled (`Bg `Magenta) |> styled `Reverse)
-        t.entry_number
-  end
+      (Magic.pp |> styled (`Bg `Magenta) |> styled `Reverse)
+      (g_magic t)
+      (Kind.pp_raw ~off:offsets.kind |> styled (`Fg `Magenta))
+      t
+      (Kind.pp |> styled (`Bg `Magenta) |> styled `Reverse)
+      (g_kind t)
+      (Nentry.pp_raw ~off:offsets.nentry |> styled (`Fg `Magenta))
+      t
+      (Nentry.pp |> styled (`Bg `Magenta) |> styled `Reverse)
+      (g_nentry t)
+      (Ndeadentry.pp_raw ~off:offsets.ndeadentry |> styled (`Fg `Magenta))
+      t
+      (Ndeadentry.pp |> styled (`Bg `Magenta) |> styled `Reverse)
+      (g_ndeadentry t)
+end

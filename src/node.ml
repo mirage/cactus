@@ -45,14 +45,40 @@ functor
 
     let split t =
       let address = Store.allocate t.store in
-      let k, node = NodeFmt.split t.node t.store address in
+      let k, node = NodeFmt.split t.node address in
       (k, { store = t.store; node; address })
+
+    let merge t1 t2 =
+      let partial = NodeFmt.length t1.node + NodeFmt.length t2.node >= 2 * Params.fanout in
+      NodeFmt.merge t1.node t2.node (if partial then `Partial else `Total);
+      if not partial then Store.deallocate t2.store t2.address;
+      if partial then `Partial else `Total
+
+    let leftmost t = NodeFmt.leftmost t.node
 
     let find t key = NodeFmt.find t.node key |> decode_address
 
+    type neighbour = {
+      main : Key.t * Store.address;
+      neighbour : (Key.t * Store.address) option;
+      order : [ `Lower | `Higher ];
+    }
+
+    let find_with_neighbour t key =
+      let ({ main; neighbour; order } : NodeFmt.neighbour) =
+        NodeFmt.find_with_neighbour t.node key
+      in
+      let k1, v1 = main in
+      let neighbour =
+        match neighbour with None -> None | Some (k2, v2) -> Some (k2, v2 |> decode_address)
+      in
+      { main = (k1, v1 |> decode_address); neighbour; order }
+
     let add t key address = address |> encode_address |> NodeFmt.add t.node key
 
-    let delete t key = NodeFmt.remove t.node key
+    let replace t k1 k2 = NodeFmt.replace t.node k1 k2
+
+    let remove t key = NodeFmt.remove t.node key
 
     let migrate kvs depth = NodeFmt.migrate kvs depth
 

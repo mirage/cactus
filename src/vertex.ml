@@ -31,6 +31,7 @@ functor
 
     let nentry t = Header.g_nentry t.header |> Header.Nentry.from_t
 
+    let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
 
     let flag_sz, key_sz, bound_sz = (Common.Flag.size, Params.key_sz, Bound.size)
 
@@ -119,14 +120,28 @@ functor
       else if Key.compare key (nth_key t (n + 1)) < 0 then 0
       else comp
 
-    let shrink _t = failwith "Not implemented"
-
     let keys_sorted t =
       let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.debug_dump) in
       Utils.is_sorted ret
 
-    let split t store address =
-      tic stat_split;
+    let shrink t =
+      let n = nentry t in
+      let rec aux src dst =
+        if src < n then
+          match nth_dead t src with
+          | true -> aux (src + 1) dst
+          | false ->
+              Bytes.blit t.buff
+                (Header.size + (src * entry_size))
+                t.buff
+                (Header.size + (dst * entry_size))
+                entry_size;
+              aux (src + 1) (dst + 1)
+      in
+      if ndeadentry t > 0 then (
+        aux 0 0;
+        Header.s_nentry t.header (nentry t - ndeadentry t |> Header.Nentry.to_t);
+        Header.s_ndeadentry t.header (0 |> Header.Ndeadentry.to_t))
 
     let split t address =
       tic stat_split;
@@ -154,16 +169,57 @@ functor
       tac stat_split;
       (promoted, mv_t)
 
-    let find t key =
-      tic stat_find;
+    let leftmost t = Key.get t.buff ~off:(Header.size + offsets.key)
+
+    let find_alive_neighbour t n =
+      let top = nentry t - 1 in
+      let bottom = 0 in
+      let rec aux current direction =
+        if current < bottom || current > top then None
+        else if not (nth_dead t current) then Some current
+        else aux (current + direction) direction
+      in
+      (aux (n - 1) (-1), aux (n + 1) 1)
+
+    let find_n t key =
       let compare =
         match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
       in
-      let n = Utils.binary_search ~compare 0 (entry_number t) in
-      if nth_dead t n then raise Not_found;
-      let ret = nth_bound t n in
+      let n = Utils.binary_search ~compare 0 (nentry t) in
+      if nth_dead t n then
+        match Bound.kind with
+        | `Leaf -> raise Not_found
+        | `Node -> (
+            (* find the nearest left alive neighbour *)
+            match find_alive_neighbour t n |> fst with None -> raise Not_found | Some n -> n)
+      else n
+
+    let find t key =
+      tic stat_find;
+      let n = find_n t key in
       tac stat_find;
-      ret
+      nth_bound t n
+
+    type neighbour = {
+      main : Key.t * Bound.t;
+      neighbour : (Key.t * Bound.t) option;
+      order : [ `Lower | `Higher ];
+    }
+
+    let find_with_neighbour t key =
+      tic stat_find;
+      let n = find_n t key in
+      let m =
+        match find_alive_neighbour t n with
+        | None, None -> None
+        | None, Some m | Some m, None -> Some m
+        | Some _left, Some right -> Some right
+        (* TODO : use a good heuristic for choosing neighbour*)
+      in
+      let neighbour = match m with None -> None | Some m -> Some (nth_key t m, nth_bound t m) in
+      let order = match m with Some m when m < n -> `Lower | _ -> `Higher in
+      tac stat_find;
+      { main = (nth_key t n, nth_bound t n); neighbour; order }
 
     let mem t key =
       tic stat_mem;
@@ -200,7 +256,7 @@ functor
       tic stat_add;
       let position = find_position t key in
       let shadow = Key.equal (nth_key t position) key in
-      let append = position >= entry_number t in
+      let append = position >= nentry t in
 
       if shadow then
         Log.warn (fun reporter ->
@@ -217,9 +273,70 @@ functor
       if Params.debug then assert (keys_sorted t);
       tac stat_add
 
-    let remove _t _key = failwith "not finished"
+    let replace t k1 k2 =
+      let n = find_n t k1 in
+      k2 |> Key.set t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
+      if
+        Key.compare k1 k2 < 0 && n < nentry t - 1 && Key.compare k2 (nth_key t (n + 1)) > 0
+        (* sorted invariant is broken *)
+      then shrink t;
+      if
+        Key.compare k1 k2 > 0 && n > 0 && Key.compare k2 (nth_key t (n - 1)) < 0
+        (* sorted invariant is broken *)
+      then shrink t;
+      if Params.debug then assert (keys_sorted t)
 
-    let length t = entry_number t
+    let remove t key =
+      let compare = compare t key in
+      let n = Utils.binary_search ~compare 0 (nentry t) in
+      if nth_dead t n then raise Not_found;
+      let off = Header.size + (n * entry_size) in
+      Common.Flag.to_t true |> Common.Flag.set t.buff ~off:(off + offsets.flag);
+      Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
+
+    (*
+       Fmt.pr "%s@;%s@." (String.make 50 '=')
+         (match mode with `Partial -> "Partial" | `Total -> "Total");
+       Fmt.pr "@[<v>%a@;%a@]" pp t1 pp t2;
+      Fmt.pr "@[<v>diff:%i@;@[<v 3>before:@;n1:%i@;n2:%i@]@;@[<v 3>after:@;n1:%i@;n2:%i@]@]@."
+        diff n1 n2 (nentry t1) (nentry t2)
+
+    *)
+    let merge t1 t2 mode =
+      shrink t1;
+      shrink t2;
+      let n1 = nentry t1 in
+      let n2 = nentry t2 in
+      let () =
+        match mode with
+        | `Total ->
+            Header.s_nentry t1.header (n1 + n2 |> Header.Nentry.to_t);
+            Header.s_nentry t2.header (0 |> Header.Nentry.to_t);
+            Bytes.blit t2.buff Header.size t1.buff
+              (Header.size + (n1 * entry_size))
+              (n2 * entry_size)
+        | `Partial ->
+            let diff = (n2 - n1) / 2 in
+            Header.s_nentry t1.header (n1 + diff |> Header.Nentry.to_t);
+            Header.s_nentry t2.header (n2 - diff |> Header.Nentry.to_t);
+            if n2 > n1 then (
+              Bytes.blit t2.buff Header.size t1.buff
+                (Header.size + (n1 * entry_size))
+                (diff * entry_size);
+              Bytes.blit t2.buff
+                (Header.size + (diff * entry_size))
+                t2.buff Header.size
+                ((n2 - diff) * entry_size))
+            else (
+              Bytes.blit t2.buff Header.size t2.buff
+                (Header.size - (diff * entry_size))
+                (n2 * entry_size);
+              Bytes.blit t1.buff
+                (Header.size + ((n1 + diff) * entry_size))
+                t2.buff Header.size (-diff * entry_size))
+      in
+      Fmt.pr "%s@." (match mode with `Partial -> "Partial" | `Total -> "Total");
+      if Params.debug then assert (keys_sorted t1 && keys_sorted t2)
 
     let length t = nentry t - ndeadentry t
 

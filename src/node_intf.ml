@@ -25,11 +25,25 @@ module type S = sig
 
   val split : t -> key * t
 
+  val merge : t -> t -> [ `Partial | `Total ]
+
   val find : t -> key -> address
+
+  val leftmost : t -> key
+
+  type neighbour = {
+    main : key * address;
+    neighbour : (key * address) option;
+    order : [ `Lower | `Higher ];
+  }
+
+  val find_with_neighbour : t -> key -> neighbour
 
   val add : t -> key -> address -> unit
 
-  val delete : t -> key -> unit
+  val replace : t -> key -> key -> unit
+
+  val remove : t -> key -> unit
 
   val iter : t -> (key -> address -> unit) -> unit
 
@@ -48,9 +62,9 @@ end
 module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K) ->
   S
     with type key = Key.t
-     and type address := Store.address
-     and type store := Store.t
-     and type kind := Field.kind
+     and type address = Store.address
+     and type store = Store.t
+     and type kind = Field.kind
 
 module type Node = sig
   module type S = S
