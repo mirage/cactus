@@ -46,4 +46,4 @@ val dump : t -> string
 val load : string -> t
 (** the inverse function of [dump]. This should only be use by low level IO modules. *)
 
-val pp : Format.formatter -> t -> unit
+val pp : t Fmt.t

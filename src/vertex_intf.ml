@@ -77,7 +77,7 @@ module type S = sig
   val depth : t -> int
   (** [depth t] is the depth of the vertex [t] in the btree it is part of *)
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
   (** [pp ppf t] outputs a human-readable representation of [t] to the formatter [ppf] *)
 end
 
@@ -91,7 +91,7 @@ module type BOUND = sig
 
   val size : int
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 
   val kind : [ `Leaf | `Node ]
 end

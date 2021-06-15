@@ -50,7 +50,7 @@ module type S = sig
 
   val iter : t -> (address -> page -> unit) -> unit
 
-  val pp_header : Format.formatter -> t -> unit
+  val pp_header : t Fmt.t
 
   module Private : sig
     val dir : t -> string

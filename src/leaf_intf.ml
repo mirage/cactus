@@ -46,7 +46,7 @@ module type S = sig
 
   val migrate : string list -> string
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 end
 
 module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K) (Value : Data.V) ->

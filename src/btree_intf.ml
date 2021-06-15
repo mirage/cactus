@@ -4,6 +4,7 @@ module Private = struct
   module Stats = Stats
   module Tag = Log.Tag
   module Default = Input.Default
+  module Input = Input
   module Data = Data
 end
 
@@ -19,7 +20,7 @@ module type S = sig
   val empty_cache : unit -> cache
 
   val create : ?cache:cache -> string -> t
-  (* [create ~root] creates a btree storage in directory [root] *)
+  (* [create root] creates a btree storage in directory [root] *)
 
   val init : root:string -> int -> read:(int -> string) -> t
   (** [init ~root n ~read] performs a batch initialisation. [read] is an iterator-like function :
@@ -46,7 +47,7 @@ module type S = sig
   val length : t -> int
   (** [length t] is the number of bindings in [t] *)
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 
   val snapshot : ?depth:int -> t -> unit
 
@@ -86,7 +87,7 @@ module type S = sig
 
     val go_to_leaf : t -> key -> int list
 
-    val pp : t -> Format.formatter -> int -> unit
+    val pp : t -> int Fmt.t
   end
 end
 

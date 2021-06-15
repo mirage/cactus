@@ -271,7 +271,7 @@ module Utils = struct
   include MakeCommon (Utils_)
 end
 
-type stats = (string * (string * Func.t) list) list
+type t = (string * (string * Func.t) list) list
 
 let modules = [ (module Btree : Common); (module Nodes); (module Store); (module Utils) ]
 
@@ -283,7 +283,7 @@ let get () =
   let from_module name (module M : Common) = (name, M.get ()) in
   List.map2 from_module module_names modules
 
-let get_by_name stats ~modul ~stat = stats |> List.assoc modul |> List.assoc stat
+let get_by_name t ~modul ~stat = t |> List.assoc modul |> List.assoc stat
 
 let rec pp_print_assoclist ?pp_sep ppf pps_and_args =
   (* pps_and_args is an association list which specifies a pp for each arg,
@@ -297,8 +297,8 @@ let rec pp_print_assoclist ?pp_sep ppf pps_and_args =
 
 let make_assoc l1 l2 = List.map2 (fun a b -> (a, b)) l1 l2
 
-let pp ppf stats =
-  let stats_without_names = List.map (fun (_name, mstats) -> mstats) stats in
+let pp ppf t =
+  let stats_without_names = List.map (fun (_name, mstats) -> mstats) t in
   let pps = modules |> List.map (fun (module M : Common) -> M.pp) in
   let pps_and_args = make_assoc pps stats_without_names in
   let pp_sep ppf () = Format.pp_print_break ppf 1 0 in
@@ -306,15 +306,15 @@ let pp ppf stats =
 
 type json_stat = { name : string; stat : Func.json_t } [@@deriving repr]
 
-type json_module_stats = { modul : string; stats : json_stat list } [@@deriving repr]
+type json_module_stats = { modul : string; t : json_stat list } [@@deriving repr]
 
 type json_stats = json_module_stats list [@@deriving repr]
 
 let pp_json = Repr.pp_json json_stats_t
 
-let pp_json ppf stats =
+let pp_json ppf t =
   let json_of_stat (name, stat) = { name; stat = Func.of_t stat } in
   let json_stats =
-    List.map (fun (modul, name_stats) -> { modul; stats = List.map json_of_stat name_stats }) stats
+    List.map (fun (modul, name_stats) -> { modul; t = List.map json_of_stat name_stats }) t
   in
   pp_json ppf json_stats

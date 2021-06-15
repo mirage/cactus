@@ -13,7 +13,7 @@ module type FIELD = sig
 
   val from_t : t -> convert
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 
   val pp_raw : Format.formatter -> bytes -> off:int -> unit
 end

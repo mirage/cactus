@@ -13,7 +13,7 @@ module type H = sig
 
   val size : int
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 
   val g_magic : t -> Common.Magic.t
 

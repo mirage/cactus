@@ -56,7 +56,7 @@ module type S = sig
   (** [migrate kvs depth] constructs the serialised representation of the node associated to [kvs],
       the list of string representations for key,value bindings. *)
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 end
 
 module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K) ->

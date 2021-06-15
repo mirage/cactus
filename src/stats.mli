@@ -23,20 +23,20 @@ module Func : sig
   val get_span : t -> Mtime.span
   (** Total time taken by tic-tacs *)
 
-  val pp : Format.formatter -> t -> unit
+  val pp : t Fmt.t
 end
 
-type stats
+type t
 
 val reset : unit -> unit
 
-val get : unit -> stats
+val get : unit -> t
 
-val get_by_name : stats -> modul:string -> stat:string -> Func.t
+val get_by_name : t -> modul:string -> stat:string -> Func.t
 
-val pp : Format.formatter -> stats -> unit
+val pp : t Fmt.t
 
-val pp_json : Format.formatter -> stats -> unit
+val pp_json : t Fmt.t
 
 type module_stats
 
@@ -49,7 +49,7 @@ module type Common = sig
 
   val get : unit -> module_stats
 
-  val pp : Format.formatter -> module_stats -> unit
+  val pp : module_stats Fmt.t
 end
 
 module Btree : sig
