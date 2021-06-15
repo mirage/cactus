@@ -381,6 +381,10 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     fsync t;
     CaliforniaCache.full_clear t.cache
 
+  let close t =
+    flush t;
+    Unix.close t.fd
+
   let root t = Header.g_root t.header |> Common.Address.from_t
 
   let reroot t address =

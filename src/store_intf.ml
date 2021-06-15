@@ -48,6 +48,8 @@ module type S = sig
 
   val clear : t -> unit
 
+  val close : t -> unit
+
   val iter : t -> (address -> page -> unit) -> unit
 
   val pp_header : t Fmt.t

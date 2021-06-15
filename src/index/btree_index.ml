@@ -27,7 +27,7 @@ module Make (Key : Key) (Value : Value) = struct
 
   let close ?immediately t =
     ignore immediately;
-    flush t
+    close t
 
   let filter _t _cond = raise (NotInBtree "filter")
 

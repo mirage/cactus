@@ -38,6 +38,8 @@ module type S = sig
 
   val clear : t -> unit
 
+  val close : t -> unit
+
   val flush : t -> unit
 
   val iter : (key -> value -> unit) -> t -> unit
