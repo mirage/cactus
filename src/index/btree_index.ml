@@ -1,6 +1,6 @@
 include Btree_index_intf
 
-module Make (Key : Index.Key.S) (Value : Index.Value.S) = struct
+module Make (Key : Key) (Value : Value) = struct
   module Key : Btree.Input.Key with type t = Key.t = struct
     include Key
 

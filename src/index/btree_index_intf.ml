@@ -105,7 +105,43 @@ module type S = sig
       smaller than [log_size]. *)
 end
 
-module type MAKER = functor (Key : Index.Key.S) (Value : Index.Value.S) ->
+module type Key = sig
+  type t [@@deriving repr]
+  (** The type for keys. *)
+
+  val equal : t -> t -> bool
+  (** The equality function for keys. *)
+
+  val hash : t -> int
+  (** Note: Unevenly distributed hash functions may result in performance drops. *)
+
+  val hash_size : int
+  (** The number of bits necessary to encode the maximum output value of {!hash}. `Hashtbl.hash`
+      uses 30 bits. Overestimating the [hash_size] will result in performance drops; underestimation
+      will result in undefined behavior. *)
+
+  val encode : t -> string
+  (** [encode] is an encoding function. The resultant encoded values must have size {!encoded_size}. *)
+
+  val encoded_size : int
+  (** [encoded_size] is the size of the result of {!encode}, expressed in number of bytes. *)
+
+  val decode : string -> int -> t
+  (** [decode s off] is the decoded form of the encoded value at the offset [off] of string [s].
+      Must satisfy [decode (encode t) 0 = t]. *)
+end
+
+module type Value = sig
+  type t [@@deriving repr]
+
+  val encode : t -> string
+
+  val encoded_size : int
+
+  val decode : string -> int -> t
+end
+
+module type MAKER = functor (Key : Key) (Value : Value) ->
   S with type key = Key.t and type value = Value.t
 
 module type Btree_index = sig
