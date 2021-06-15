@@ -4,10 +4,13 @@ Clone [bentov](https://github.com/gbelouze/bentov) and [oracle](https://github.c
 
 ```bash
 # from btree/
+mkdir vendors
 cd ..
 git clone https://github.com/gbelouze/bentov
 git clone https://github.com/gbelouze/oracle
 cd btree/
-ln -s ../bentov
-ln -s ../oracle
+cd vendors
+ln -s ../../bentov
+ln -s ../../oracle
+cd ..
 ```
