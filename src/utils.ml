@@ -26,17 +26,6 @@ let is_sorted l =
         Fmt.pr "%a@." Fmt.(list string) (List.map (fun s -> s |> Hex.of_string |> Hex.show) l);
       ret
 
-let rec last_elem l =
-  match l with [] -> failwith "Empty list" | [ e ] -> e | _ :: t -> last_elem t
-
-(** range function *)
-let rec ( -- ) a b = if a > b then [] else a :: (a + 1 -- b)
-
-let rec iter func n =
-  if n > 0 then (
-    func ();
-    iter func (n - 1))
-
 let sizes_to_offsets sizes =
   let rec aux acc remaining =
     match (remaining, acc) with
@@ -53,31 +42,6 @@ let min_key length =
 let max_key length =
   (* creates the largest key of length [length] *)
   String.make length '\255'
-
-let rec map3 func l1 l2 l3 =
-  (* the inexistent List.map3 *)
-  match (l1, l2, l3) with
-  | [], [], [] -> []
-  | a1 :: l1, a2 :: l2, a3 :: l3 -> func a1 a2 a3 :: map3 func l1 l2 l3
-  | _ -> failwith "Invalid argument"
-
-let rec strip n l = match n with 0 -> l | _ -> strip (n - 1) (List.tl l)
-
-let eat_offset offset sizes =
-  let rec aux total sizes =
-    match sizes with
-    | [] -> []
-    | size :: sizes ->
-        if total + size >= offset then (total + size - offset) :: sizes
-        else aux (total + size) sizes
-  in
-  aux 0 sizes
-
-let rec pop_n n liste =
-  match (n, liste) with
-  | 0, _ -> liste
-  | _, [] -> failwith "Too much to pop"
-  | _, _ :: t -> pop_n (n - 1) t
 
 let really_read fd buff off length =
   (* repeat read until all bytes are read *)
