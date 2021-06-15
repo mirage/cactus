@@ -25,6 +25,8 @@ module Make (Key : Key) (Value : Value) = struct
 
   let sync _t = raise (NotInBtree "sync")
 
+  let flush _t = ()
+
   let close ?immediately t =
     ignore immediately;
     close t
