@@ -1,0 +1,23 @@
+(executable
+ (name bench)
+ (libraries
+  btree
+  cmdliner
+  mtime
+  progress.unix
+  logs
+  logs.fmt
+  index
+  oracle
+  memtrace)
+ (preprocess
+  (pps ppx_repr)))
+
+(alias
+ (name bench)
+ (deps ./bench.exe))
+
+(rule
+ (alias runbench)
+ (action
+  (run ./bench.exe -- --minimal --clear)))
