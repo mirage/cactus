@@ -37,16 +37,6 @@ let rec iter func n =
     func ();
     iter func (n - 1))
 
-let replace s offset replacement =
-  let length = Encoder.length s in
-  let replacement_length = min (Encoder.length replacement) (length - offset) in
-  Encoder.concat
-    [
-      Encoder.sub s 0 offset;
-      Encoder.sub replacement 0 replacement_length;
-      Encoder.sub s (offset + replacement_length) (length - offset - replacement_length);
-    ]
-
 let sizes_to_offsets sizes =
   let rec aux acc remaining =
     match (remaining, acc) with
@@ -71,26 +61,6 @@ let rec map3 func l1 l2 l3 =
   | a1 :: l1, a2 :: l2, a3 :: l3 -> func a1 a2 a3 :: map3 func l1 l2 l3
   | _ -> failwith "Invalid argument"
 
-let chunkate ?(safe = true) ~off n s =
-  (* split [s] in chunks of size [n], except possibly for the last chunk, which is dropped if [safe] is [false]*)
-  let l = Encoder.length s in
-  let rec aux acc i =
-    if l - i = n then Encoder.sub s i (l - i) :: acc |> List.rev
-    else if l - i < n then if safe then Encoder.sub s i (l - i) :: acc |> List.rev else acc
-    else aux (Encoder.sub s i n :: acc) (i + n)
-  in
-  if off = 0 then aux [] 0 else Encoder.sub s 0 off :: aux [] off
-
-let chunkate_list n l =
-  let rec aux count current acc l =
-    match l with
-    | [] -> current :: acc
-    | h :: t ->
-        if count = 0 then aux (n - 1) [ h ] (current :: acc) t
-        else aux (count - 1) (h :: current) acc t
-  in
-  aux n [] [] l |> List.rev |> List.map List.rev
-
 let rec strip n l = match n with 0 -> l | _ -> strip (n - 1) (List.tl l)
 
 let eat_offset offset sizes =
@@ -102,18 +72,6 @@ let eat_offset offset sizes =
         else aux (total + size) sizes
   in
   aux 0 sizes
-
-let chunkate_with ~off ns s =
-  let l = Encoder.length s in
-  let ns = eat_offset off ns in
-  let rec aux acc i ns =
-    match ns with
-    | [] -> acc |> List.rev
-    | n :: ns ->
-        let n = min n (l - i) in
-        aux (Encoder.sub s i n :: acc) (i + n) ns
-  in
-  aux [] 0 ns
 
 let rec pop_n n liste =
   match (n, liste) with
@@ -152,3 +110,24 @@ let assert_write fd buff off length =
     Log.err @@ fun reporter ->
     reporter "Tried writing %i but could only write %i" length write_sz;
     assert false)
+
+let b256size n =
+  let rec aux acc n = match n with 0 -> acc | _ -> aux (1 + acc) (n / 256) in
+  aux 0 n
+
+let to_b256 n =
+  let buff = Bytes.create 8 in
+  let rec aux l n =
+    match n with
+    | 0 -> Bytes.sub_string buff (8 - l) l
+    | _ ->
+        let q, r = (n mod 256, n / 256) in
+        Bytes.set buff (7 - l) (Char.chr q);
+        aux (l + 1) r
+  in
+  aux 0 n
+
+let from_b256 s =
+  let rep = ref 0 in
+  String.iter (fun c -> rep := Char.code c + (!rep * 256)) s;
+  !rep

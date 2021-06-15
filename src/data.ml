@@ -54,13 +54,6 @@ module type V = sig
 
   val get : bytes -> off:int -> t
 
-  (*
-     val encode : t -> Encoder.t
-     (** [encode] is an encoding function. *)
-
-     val decode : Encoder.t -> t
-     (** Must satisfy [decode (encode t) = t]. *)
-  *)
   val pp : Format.formatter -> t -> unit
 end
 
@@ -119,10 +112,6 @@ functor
 
       let get buff ~off = Bytes.sub_string buff off size
 
-      let _encode = Encoder.load
-
-      let _decode = Encoder.dump
-
       let concat k1 k2 = k1 ^ k2
 
       let sub t ~off ~len = String.sub t off len
@@ -156,10 +145,6 @@ functor
       let set buff ~off t = Bytes.blit_string t 0 buff off size
 
       let get buff ~off = Bytes.sub_string buff off size
-
-      let _encode s = Encoder.encode_string s
-
-      let _decode = Encoder.decode_string
 
       let of_input v =
         let ret = InValue.encode v in

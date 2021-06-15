@@ -73,10 +73,10 @@ module Default = struct
     let encoded_size = 15
 
     let encode i =
-      i |> Encoder.to_b256 |> fun s -> String.make (encoded_size - String.length s) '\000'
+      i |> Utils.to_b256 |> fun s -> String.make (encoded_size - String.length s) '\000'
 
     let decode s =
       assert (String.length s = encoded_size);
-      s |> Encoder.from_b256
+      s |> Utils.from_b256
   end
 end

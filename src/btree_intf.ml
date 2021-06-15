@@ -1,6 +1,5 @@
 module Private = struct
   module Utils = Utils
-  module Encoder = Encoder
   module Stats = Stats
   module Tag = Log.Tag
   module Default = Input.Default

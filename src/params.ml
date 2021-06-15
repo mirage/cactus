@@ -76,13 +76,13 @@ functor
 
     let key_sz = Key.encoded_size
 
-    let max_key = 2 * fanout
+    let max_key = (2 * fanout) + 1
 
-    let max_key_sz = max_key |> Encoder.to_b256 |> String.length
+    let max_key_sz = max_key |> Utils.b256size
 
     let magic_sz = String.(max (length btree_magic) (length page_magic))
 
-    let key_repr_sz = key_sz |> Encoder.to_b256 |> String.length
+    let key_repr_sz = key_sz |> Utils.b256size
 
     let () =
       if 1 lsl (4 * offset_sz) < page_sz then failwith "Pages are too large to be fully addressable"
