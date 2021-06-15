@@ -27,19 +27,33 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let min_key = Key.min
 
-  type t = { store : Store.t }
+  type t = { store : Store.t; mutable instances : int }
 
   type cache = (string, t) Hashtbl.t
 
-  let empty_cache () : cache = Hashtbl.create 10
+  let caches = ref []
 
-  let flush tree = Store.flush tree.store
+  let empty_cache () : cache =
+    let cache = Hashtbl.create 10 in
+    caches := cache :: !caches;
+    cache
 
-  let clear tree =
+  let flush t = Store.flush t.store
+
+  let clear t =
     Log.debug (fun reporter -> reporter "clearing");
-    Store.clear tree.store;
-    Leaf.init tree.store (Store.root tree.store) |> ignore;
-    flush tree
+    Store.clear t.store;
+    Leaf.init t.store (Store.root t.store) |> ignore;
+    flush t
+
+  let close t =
+    Log.debug (fun reporter ->
+        reporter "Closing a btree instance at root %s" (Store.Private.dir t.store));
+    t.instances <- t.instances - 1;
+    if t.instances = 0 then (
+      Log.info (fun reporter -> reporter "Closing %s/b.tree" (Store.Private.dir t.store));
+      Store.close t.store;
+      List.iter (fun cache -> Hashtbl.remove cache (Store.Private.dir t.store)) !caches)
 
   let snapshot ?(depth = 0) t =
     (* for every node/leaf in [t] which are at least [depth] away from the leaves, [snapshot ~depth t], write in a file its rep as given by their corresponding pp function *)
@@ -95,10 +109,13 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Log.info (fun reporter -> reporter "Btree version %i (13 Apr. 2021)" Size.version);
     Log.debug (fun reporter -> reporter "Btree at root %s" root);
     let cache = match cache with None -> empty_cache () | Some cache -> cache in
-    if Hashtbl.mem cache root then Hashtbl.find cache root
+    if Hashtbl.mem cache root then (
+      let t = Hashtbl.find cache root in
+      t.instances <- t.instances + 1;
+      t)
     else
       let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
-      let t = { store = Store.init ~root } in
+      let t = { store = Store.init ~root; instances = 1 } in
       if just_load then Log.debug (fun reporter -> length t |> reporter "Loading %i bindings")
       else (
         Leaf.init t.store (Store.root t.store) |> ignore;
@@ -361,7 +378,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     create true depth n |> ignore;
     Store.Private.end_migration store (!address + 1) !address;
     incr address;
-    { store }
+    { store; instances = 1 }
 
   let pp ppf t =
     Fmt.pf ppf "@[<hov 2>ROOT OF THE TREE:@;%a@]" Leaf.pp (Leaf.load t.store (Store.root t.store))
