@@ -29,18 +29,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   type t = { store : Store.t }
 
-  type cache = int
+  type cache = (string, t) Hashtbl.t
 
-  let next_cache = ref 0
-
-  let caches : (cache, t) Hashtbl.t = Hashtbl.create 16
-
-  let roots : (cache, string) Hashtbl.t = Hashtbl.create 16
-
-  let empty_cache () =
-    incr next_cache;
-    Log.debug (fun reporter -> reporter "Creating a new cache id : %i " !next_cache);
-    !next_cache
+  let empty_cache () : cache = Hashtbl.create 10
 
   let flush tree = Store.flush tree.store
 
@@ -102,14 +93,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let create ?cache root =
     Log.info (fun reporter -> reporter "Btree version %i (13 Apr. 2021)" Size.version);
-    Log.debug (fun reporter ->
-        reporter "Btree at root %s %s" root
-          (match cache with
-          | None -> "without cache"
-          | Some cache -> Fmt.str "with cache id %i" cache));
+    Log.debug (fun reporter -> reporter "Btree at root %s" root);
     let cache = match cache with None -> empty_cache () | Some cache -> cache in
-    let overwriting = Hashtbl.mem caches cache && root != Hashtbl.find roots cache in
-    if Hashtbl.mem caches cache && not overwriting then Hashtbl.find caches cache
+    if Hashtbl.mem cache root then Hashtbl.find cache root
     else
       let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
       let t = { store = Store.init ~root } in
@@ -117,12 +103,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       else (
         Leaf.init t.store (Store.root t.store) |> ignore;
         flush t);
-      if overwriting then
-        Log.warn (fun reporter ->
-            reporter "Overwriting cache with id %i from %s to root %s" cache
-              (Hashtbl.find roots cache) root);
-      Hashtbl.add roots cache root;
-      Hashtbl.add caches cache t;
+      Hashtbl.add cache root t;
       t
 
   let rec go_to_leaf tree key address =
