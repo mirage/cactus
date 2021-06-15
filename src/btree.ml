@@ -180,6 +180,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let add tree inkey invalue =
     tic stat_add;
+    Index_stats.incr_nb_replace ();
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
     let path = path_to_leaf tree key in

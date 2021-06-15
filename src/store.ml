@@ -211,8 +211,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
             ~buffer:content.buff ~buffer_offset:0 ~length:max_size
         in
         assert (write_size = max_size);
+        Index_stats.add_write write_size;
         tac stat_io_w;
-        increment stat_io_w "nb_bytes" max_size)
+        increment stat_io_w "nb_bytes" write_size)
 
     let flush t = _flush t.store.fd t.address t.content
 
@@ -239,8 +240,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
          let write_size = Unix.write store.fd _buff0 0 max_size in
       *)
       assert (write_size = max_size);
+      Index_stats.add_write write_size;
       tac stat_io_w;
-      increment stat_io_w "nb_bytes" max_size
+      increment stat_io_w "nb_bytes" write_size
 
     (* Header functions *)
 

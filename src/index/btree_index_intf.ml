@@ -141,6 +141,8 @@ module type Value = sig
   val decode : string -> int -> t
 end
 
+module Stats = Btree.Private.Index_stats
+
 module type MAKER = functor (Key : Key) (Value : Value) ->
   S with type key = Key.t and type value = Value.t
 
@@ -148,4 +150,6 @@ module type Btree_index = sig
   module type S = S
 
   module Make : MAKER
+
+  module Stats = Stats
 end

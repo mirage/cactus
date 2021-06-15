@@ -1,6 +1,7 @@
 module Private = struct
   module Utils = Utils
   module Stats = Stats
+  module Index_stats = Index_stats
   module Tag = Log.Tag
   module Default = Input.Default
   module Input = Input
