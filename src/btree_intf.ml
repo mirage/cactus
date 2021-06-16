@@ -6,6 +6,7 @@ module Private = struct
   module Default = Input.Default
   module Input = Input
   module Data = Data
+  module Syscalls = Syscalls
 end
 
 module type S = sig
