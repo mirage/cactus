@@ -262,17 +262,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
               (match order with
               | `Lower -> (
                   match Merger.merge v2 v1 with
-                  | `Partial ->
-                      Fmt.pr "Replacing %a with %a@." Key.pp k1 Key.pp (Merger.leftmost v1);
-                      Node.replace node k1 (Merger.leftmost v1)
-                  | `Total ->
-                      Fmt.pr "key : %a@." Key.pp k1;
-                      Node.remove node k1)
+                  | `Partial -> Node.replace node k1 (Merger.leftmost v1)
+                  | `Total -> Node.remove node k1)
               | `Higher -> (
                   match Merger.merge v1 v2 with
-                  | `Partial ->
-                      Fmt.pr "Replacing %a with %a@." Key.pp k2 Key.pp (Merger.leftmost v2);
-                      Node.replace node k2 (Merger.leftmost v2)
+                  | `Partial -> Node.replace node k2 (Merger.leftmost v2)
                   | `Total -> Node.remove node k2));
               if Node.underflow node then merges path)
     in

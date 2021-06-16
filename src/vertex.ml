@@ -274,6 +274,7 @@ functor
       tac stat_add
 
     let replace t k1 k2 =
+      (* this function is only used in the context of a deletion, after a merge, to update the separator key *)
       let n = find_n t k1 in
       k2 |> Key.set t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
       if
@@ -327,7 +328,6 @@ functor
                 (Header.size + ((n1 + diff) * entry_size))
                 t2.buff Header.size (-diff * entry_size))
       in
-      Fmt.pr "%s@." (match mode with `Partial -> "Partial" | `Total -> "Total");
       if Params.debug then assert (keys_sorted t1 && keys_sorted t2)
 
     let length t = nentry t - ndeadentry t
