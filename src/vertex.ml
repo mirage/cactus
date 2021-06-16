@@ -294,14 +294,6 @@ functor
       Common.Flag.to_t true |> Common.Flag.set t.buff ~off:(off + offsets.flag);
       Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
 
-    (*
-       Fmt.pr "%s@;%s@." (String.make 50 '=')
-         (match mode with `Partial -> "Partial" | `Total -> "Total");
-       Fmt.pr "@[<v>%a@;%a@]" pp t1 pp t2;
-      Fmt.pr "@[<v>diff:%i@;@[<v 3>before:@;n1:%i@;n2:%i@]@;@[<v 3>after:@;n1:%i@;n2:%i@]@]@."
-        diff n1 n2 (nentry t1) (nentry t2)
-
-    *)
     let merge t1 t2 mode =
       shrink t1;
       shrink t2;
