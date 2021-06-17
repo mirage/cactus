@@ -40,8 +40,8 @@ argparser.add_argument("--with-log",
                        help="Looks for b.log to plot additional information")
 argparser.add_argument("--modules",
                        nargs="+",
-                       choices=["Tree", "Store", "Nodes", "Utils"],
-                       default=["Tree", "Store", "Nodes", "Utils"],
+                       choices=["Btree", "Store", "Nodes", "Utils"],
+                       default=["Btree", "Store", "Nodes", "Utils"],
                        help="Plots only functions from provided modules")
 argparser.add_argument("--names", help="Regexp on the functions name to plot.")
 argparser.add_argument("--density",
@@ -96,7 +96,7 @@ def read_log(path):
     t, heights = [], []
     with open(os.path.join(path, "b.log"), "r") as log:
         for match in re.finditer(
-                r"\[\+(\d+)ms\] \[INFO\] Tree height increases to (\d+)",
+                r"\[\+(\d+)ms\] \[INFO\] Btree height increases to (\d+)",
                 log.read()):
             t.append(float(match.group(1)))
             heights.append(int(match.group(2)))
@@ -323,7 +323,7 @@ def plot(df, modules, re_name, t_height, density, _range):
             labels.append(fname)
 
         handles = get_handles(labels)
-        if name == "Tree":
+        if name == "Btree":
             ax_prog = ax.twinx()  # different y-scale, but shared x axis
             progress = np.cumsum(group.n_ops) / np.sum(group.n_ops)
             j += 1
@@ -336,7 +336,7 @@ def plot(df, modules, re_name, t_height, density, _range):
                     [t / 1000, t / 1000], [0, 1],
                     '--',
                     color=cmap(42),
-                    label="Tree height increments" if i == 0 else None)
+                    label="Btree height increments" if i == 0 else None)
             prog_handles, _ = ax_prog.get_legend_handles_labels()
             handles += prog_handles
 
