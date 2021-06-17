@@ -202,7 +202,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       content
 
     let _flush fd address content =
-      if content.dirty || Params.version = 0 then (
+      if content.dirty || Params.version = 2 then (
         content.dirty <- false;
         tic stat_io_w;
         let write_size =
