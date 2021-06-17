@@ -320,6 +320,29 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     Params.cache_sz |> Float.of_int |> fun x ->
     Float.log x /. Float.log (Float.of_int Params.fanout) |> Float.to_int |> fun x -> x + 1
 
+  let root t = Header.g_root t.header |> Common.Address.from_t
+
+  let check_height t =
+    let tree_height = root t |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
+    if tree_height > cache_height then
+      Log.warn (fun reporter ->
+          reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height))
+
+  let reroot t address =
+    ignore CaliforniaCache.update_filter;
+    address |> Common.Address.to_t |> Header.s_root t.header;
+    rewrite_header t;
+    let tree_height = address |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
+    if tree_height > cache_height then (
+      Log.warn (fun reporter ->
+          reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height));
+
+      CaliforniaCache.update_filter t.cache ~filter:(fun content ->
+          Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height));
+
+    (* only cache the top cache_height part of the tree *)
+    fsync t
+
   let init ~root =
     Log.info (fun reporter -> reporter "Cache height is %i" cache_height);
     let ( // ) x y = x ^ "/" ^ y in
@@ -355,7 +378,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
           Params.cache_sz
       in
 
-      { n_pages; dead_pages = []; header; fd; dir = root; cache })
+      let t = { n_pages; dead_pages = []; header; fd; dir = root; cache } in
+      check_height t;
+      t)
     else
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
@@ -384,23 +409,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
   let close t =
     flush t;
     Unix.close t.fd
-
-  let root t = Header.g_root t.header |> Common.Address.from_t
-
-  let reroot t address =
-    ignore CaliforniaCache.update_filter;
-    address |> Common.Address.to_t |> Header.s_root t.header;
-    rewrite_header t;
-    let tree_height = address |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
-    if tree_height > cache_height then (
-      Log.warn (fun reporter ->
-          reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height));
-
-      CaliforniaCache.update_filter t.cache ~filter:(fun content ->
-          Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height));
-
-    (* only cache the top cache_height part of the tree *)
-    fsync t
 
   let iter t func =
     for i = 1 to t.n_pages - 1 do
