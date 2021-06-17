@@ -96,10 +96,9 @@ struct
     close_out statschan;
     ret
 
-  let run_suite suite =
+  let run_suite cache suite =
     let names = List.map Benchmark.name suite in
     let main = List.hd names in
-    let cache = Benchmark.Btree.empty_cache () in
 
     let filter_benchmark (benchmark : Benchmark.t) =
       args.clear || args.force || benchmark.kind <> `RW || not (Sys.file_exists (main // "b.tree"))
@@ -119,8 +118,8 @@ struct
         else Benchmark.suite
       in
       let suites = Benchmark.split suite in
-
-      let name_results = suites |> List.map run_suite |> List.fold_left ( @ ) [] in
+      let cache = Benchmark.Btree.empty_cache () in
+      let name_results = suites |> List.map (run_suite cache) |> List.fold_left ( @ ) [] in
       if args.json then
         let pp_name_res ppf (name, res) = Fmt.pf ppf "\"%s\":%a" name Results.pp_json res in
         Fmt.pr "{%a}" Fmt.(list ~sep:comma pp_name_res) name_results
