@@ -106,22 +106,29 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     aux root
 
   let create ?cache root =
-    Log.info (fun reporter -> reporter "Btree version %i (13 Apr. 2021)" Size.version);
+    Log.info (fun reporter -> reporter "Btree version %i (15 Jun. 2021)" Size.version);
     Log.debug (fun reporter -> reporter "Btree at root %s" root);
-    let cache = match cache with None -> empty_cache () | Some cache -> cache in
-    if Hashtbl.mem cache root then (
-      let t = Hashtbl.find cache root in
-      t.instances <- t.instances + 1;
-      t)
-    else
-      let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
-      let t = { store = Store.init ~root; instances = 1 } in
-      if just_load then Log.debug (fun reporter -> length t |> reporter "Loading %i bindings")
-      else (
-        Leaf.init t.store (Store.root t.store) |> ignore;
-        flush t);
-      Hashtbl.add cache root t;
-      t
+    let t =
+      match cache with
+      | Some cache when Hashtbl.mem cache root ->
+          Log.debug (fun reporter -> reporter "root found in cache");
+          let t = Hashtbl.find cache root in
+          t.instances <- t.instances + 1;
+          t
+      | _ ->
+          let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
+          let t = { store = Store.init ~root; instances = 1 } in
+          if just_load then Log.debug (fun reporter -> length t |> reporter "Loading %i bindings")
+          else (
+            Leaf.init t.store (Store.root t.store) |> ignore;
+            flush t);
+          t
+    in
+    match cache with
+    | Some cache ->
+        Hashtbl.add cache root t;
+        t
+    | None -> t
 
   let rec go_to_leaf tree key address =
     let page = Store.load tree.store address in
