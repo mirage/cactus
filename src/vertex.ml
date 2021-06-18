@@ -61,6 +61,11 @@ functor
 
     let nth_bound t n = Bound.get t.buff ~off:(Header.size + (n * entry_size) + offsets.bound)
 
+    let density t =
+      let n = nentry t - ndeadentry t |> Float.of_int in
+      let scale = Params.fanout |> Float.of_int in
+      (n /. scale) -. 1.
+
     let load store address =
       tic stat_load;
       let page = Store.load store address in
@@ -69,6 +74,10 @@ functor
       let header = Header.load ~marker buff in
       tac stat_load;
       let t = { store; buff; header; marker } in
+      let d = density t in
+      if d > 0. (* don't sample on the root *) then
+        Stats.Miscellaneous.add_density_sample (density t);
+      t
 
     module PP = struct
       open Fmt

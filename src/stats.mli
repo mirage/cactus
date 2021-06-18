@@ -109,3 +109,11 @@ module Utils : sig
 
   val stat_binary_search : Func.t
 end
+
+module Miscellaneous : sig
+  type t = private { density : float }
+
+  val get : unit -> t
+
+  val add_density_sample : float -> unit
+end

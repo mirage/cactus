@@ -318,3 +318,21 @@ let pp_json ppf t =
     List.map (fun (modul, name_stats) -> { modul; t = List.map json_of_stat name_stats }) t
   in
   pp_json ppf json_stats
+
+module Miscellaneous = struct
+  type density = { mutable n_samples : int; mutable average : float }
+
+  type t = { density : float }
+
+  let dens = { n_samples = 0; average = 0. }
+
+  let add_density_sample d =
+    let avg =
+      let n = Float.of_int dens.n_samples in
+      ((n *. dens.average) +. d) /. (n +. 1.)
+    in
+    dens.average <- avg;
+    dens.n_samples <- succ dens.n_samples
+
+  let get () = { density = dens.average }
+end

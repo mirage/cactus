@@ -17,6 +17,7 @@ type perf = {
   read_amplification_size : float;
   write_amplification_calls : float;
   write_amplification_size : float;
+  tree_density : float;
 }
 [@@deriving repr]
 
@@ -48,6 +49,7 @@ let run ~entry_sz ~nb_entries f : t =
   let write_amplification_calls = float_of_int nb_writes /. nb_entriesf in
   let ops_per_sec = nb_entriesf /. time in
   let mbs_per_sec = entry_sizef *. nb_entriesf /. 1_048_576. /. time in
+  let tree_density = (Stats.Miscellaneous.get ()).density in
   {
     perf =
       {
@@ -58,6 +60,7 @@ let run ~entry_sz ~nb_entries f : t =
         read_amplification_size;
         write_amplification_calls;
         write_amplification_size;
+        tree_density;
       };
     stats;
   }
@@ -71,9 +74,10 @@ let pp ppf t =
      Read amplification in bytes: %f@;\
      Write amplification in syscalls: %f@;\
      Write amplification in bytes: %f@;\
+     Tree density: %f@;\
      Max memory usage : %i Mb" t.perf.time t.perf.ops_per_sec t.perf.mbs_per_sec
     t.perf.read_amplification_calls t.perf.read_amplification_size t.perf.write_amplification_calls
-    t.perf.write_amplification_size
+    t.perf.write_amplification_size t.perf.tree_density
     (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000)
 
 let pp_detailed ppf t = Fmt.pf ppf "%a@;@[<v 2>Detailed profiling:@;%a@]" pp t Stats.pp t.stats

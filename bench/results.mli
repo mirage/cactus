@@ -1,6 +1,6 @@
 module Stats = Btree.Private.Stats
 
-type perf = {
+type perf = private {
   time : float;
   ops_per_sec : float;
   mbs_per_sec : float;
@@ -8,6 +8,7 @@ type perf = {
   read_amplification_size : float;
   write_amplification_calls : float;
   write_amplification_size : float;
+  tree_density : float;
 }
 
 type t = { perf : perf; stats : Stats.t }
