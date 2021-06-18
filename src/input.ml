@@ -48,7 +48,7 @@ module Default = struct
 
     let page_sz = 4700
 
-    let cache_sz = 10_000
+    let cache_sz = 2_000 (* 2 Gb of memory *)
 
     let debug = false
   end

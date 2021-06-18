@@ -17,6 +17,13 @@ let binary_search ?(safe = false) ~compare i j =
   tac stat_binary_search;
   ret
 
+let rec pow base = function
+  | 0 -> 1
+  | 1 -> base
+  | n ->
+      let res = pow base (n / 2) in
+      res * res * if n mod 2 = 0 then 1 else base
+
 let is_sorted l =
   let rec aux last = function [] -> true | h :: t -> if last > h then false else aux h t in
   match l with

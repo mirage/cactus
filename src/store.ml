@@ -29,93 +29,6 @@ module type HEADER = sig
   val s_root : t -> Common.Address.t -> unit
 end
 
-module CaliforniaCache : sig
-  (* You can (almost) never leave the california cache *)
-
-  type ('address, 'content) t
-
-  val v :
-    flush:('address -> 'content -> unit) ->
-    load:('address -> 'content) ->
-    filter:('content -> bool) ->
-    int ->
-    ('address, 'content) t
-
-  val find : ('address, 'content) t -> 'address -> 'content
-
-  val reload : ('address, 'content) t -> 'address -> unit
-
-  val update_filter : ('address, 'content) t -> filter:('content -> bool) -> unit
-
-  val release : ('address, 'content) t -> unit
-
-  val clear : ('address, 'content) t -> unit
-
-  val full_clear : ('address, 'content) t -> unit
-
-  val flush : ('address, 'content) t -> unit
-end = struct
-  type ('address, 'content) t = {
-    california : ('address, 'content) Hashtbl.t;
-    volatile : ('address, 'content) Hashtbl.t;
-    flush : 'address -> 'content -> unit;
-    load : 'address -> 'content;
-    mutable filter : 'content -> bool;
-  }
-
-  let v ~flush ~load ~filter n =
-    { flush; load; california = Hashtbl.create n; volatile = Hashtbl.create 16; filter }
-
-  let find t address =
-    match Hashtbl.find_opt t.california address with
-    | Some content ->
-        assert (not (Hashtbl.mem t.volatile address));
-        content
-    | None -> (
-        match Hashtbl.find_opt t.volatile address with
-        | Some content -> content
-        | None ->
-            let content = t.load address in
-            if t.filter content then Hashtbl.add t.california address content
-            else (
-              Hashtbl.add t.volatile address content;
-              if Hashtbl.length t.volatile > 64 then (
-                Log.warn (fun reporter -> reporter "Not enough release");
-                assert false));
-            content)
-
-  let reload t address =
-    if Hashtbl.mem t.volatile address then
-      let content = Hashtbl.find t.volatile address in
-      if t.filter content then (
-        Hashtbl.add t.california address content;
-        Hashtbl.remove t.volatile address)
-
-  let update_filter t ~filter =
-    t.filter <- filter;
-    Hashtbl.filter_map_inplace
-      (fun key content ->
-        if filter content then Some content
-        else (
-          t.flush key content;
-          None))
-      t.california
-
-  let release t =
-    Hashtbl.iter t.flush t.volatile;
-    Hashtbl.clear t.volatile
-
-  let clear t = Hashtbl.clear t.volatile
-
-  let full_clear t =
-    Hashtbl.clear t.volatile;
-    Hashtbl.clear t.california
-
-  let flush t =
-    Hashtbl.iter t.flush t.california;
-    release t
-end
-
 module Make (Params : Params.S) (Common : Field.COMMON) = struct
   module Common = Common
 
@@ -168,13 +81,29 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
   type content = { buff : bytes; mutable dirty : bool }
 
+  module AddressHash = struct
+    type t = address
+
+    let equal = Int.equal
+
+    let hash = Hashtbl.hash
+  end
+
+  module UnweightedContent = struct
+    type t = content
+
+    let weight _ = 1
+  end
+
+  module CaliforniaCache = Cache.Make (AddressHash) (UnweightedContent)
+
   type t = {
     mutable n_pages : int;
     mutable dead_pages : int list;
     header : Header.t;
     fd : Unix.file_descr;
     dir : string;
-    cache : (address, content) CaliforniaCache.t;
+    cache : CaliforniaCache.t;
   }
 
   type page = { address : address; store : t; content : content }
@@ -202,7 +131,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       content
 
     let _flush fd address content =
-      if content.dirty || Params.version = 2 then (
+      if content.dirty then (
         content.dirty <- false;
         tic stat_io_w;
         let write_size =
@@ -238,9 +167,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
           ~fd_offset:(real_offset address |> Optint.Int63.of_int)
           ~buffer:_buff0 ~buffer_offset:0 ~length:max_size
       in
-      (* ignore (Unix.lseek store.fd (real_offset address) Unix.SEEK_SET);
-         let write_size = Unix.write store.fd _buff0 0 max_size in
-      *)
       assert (write_size = max_size);
       Index_stats.add_write write_size;
       tac stat_io_w;
@@ -299,13 +225,14 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     tac stat_allocate;
     ret
 
-  let deallocate t address = t.dead_pages <- address :: t.dead_pages
+  let deallocate t address =
+    t.dead_pages <- address :: t.dead_pages;
+    CaliforniaCache.deallocate t.cache address
 
   let rewrite_header t =
     (* page 0 is reserved for the header *)
     let page = load t 0 in
-    Page.write page ~with_flush:true ~offset:0 (Header.dump t.header);
-    fsync t
+    Page.write page ~with_flush:true ~offset:0 (Header.dump t.header)
 
   let mkdir dirname =
     let rec aux dir k =
@@ -318,14 +245,22 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     in
     aux dirname (fun () -> ())
 
+  let max_pages = Params.cache_sz * 1_000_000 / Params.page_sz
+
   let cache_height =
-    Params.cache_sz |> Float.of_int |> fun x ->
-    Float.log x /. Float.log (Float.of_int Params.fanout) |> Float.to_int |> fun x -> x + 1
+    let f = Params.fanout |> Float.of_int in
+    let max_levels =
+      Float.to_int
+      @@ (Float.log ((Float.of_int max_pages *. ((2. *. f) -. 1.)) +. 1.) /. Float.log (2. *. f))
+    in
+    max_levels - 1
+  (* leaf height is 0 *)
 
   let root t = Header.g_root t.header |> Common.Address.from_t
 
   let check_height t =
-    let tree_height = root t |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
+    let tree_height = root t |> load t |> Page.kind |> Common.Kind.to_depth in
+    Log.debug (fun reporter -> reporter "Tree height is %i" tree_height);
     if tree_height > cache_height then
       Log.warn (fun reporter ->
           reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height))
@@ -334,13 +269,14 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     ignore CaliforniaCache.update_filter;
     address |> Common.Address.to_t |> Header.s_root t.header;
     rewrite_header t;
-    let tree_height = address |> Page.load t.fd |> Page._kind |> Common.Kind.to_depth in
-    if tree_height > cache_height then (
-      Log.warn (fun reporter ->
-          reporter "Last %i leaf/node levels are not cached" (tree_height - cache_height));
-
+    check_height t;
+    let tree_height = address |> load t |> Page.kind |> Common.Kind.to_depth in
+    if tree_height > cache_height then
       CaliforniaCache.update_filter t.cache ~filter:(fun content ->
-          Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height));
+          let depth = Page._kind content |> Common.Kind.to_depth in
+          if tree_height - depth <= cache_height then `California
+          else if tree_height - depth = cache_height + 1 then `Lru
+          else `Volatile);
 
     (* only cache the top cache_height part of the tree *)
     fsync t
@@ -350,6 +286,13 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let ( // ) x y = x ^ "/" ^ y in
     if not (Sys.file_exists root) then mkdir root;
     let file = root // "b.tree" in
+
+    let california_capacity =
+      (Utils.pow (2 * Params.fanout) (cache_height + 1) - 1) / ((2 * Params.fanout) - 1)
+    in
+    let lru_capacity = max_pages - california_capacity in
+    Log.debug (fun reporter -> reporter "California can hold up to %i pages" california_capacity);
+    Log.debug (fun reporter -> reporter "Lru can hold up to %i pages" lru_capacity);
 
     if Sys.file_exists file then (
       Log.debug (fun reporter -> reporter "Loading btree file found at %s" file);
@@ -375,9 +318,12 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
           ~filter:(fun content ->
-            Page._kind content |> Common.Kind.to_depth |> fun x -> tree_height - x <= cache_height)
+            let depth = Page._kind content |> Common.Kind.to_depth in
+            if tree_height - depth <= cache_height then `California
+            else if tree_height - depth = cache_height + 1 then `Lru
+            else `Volatile)
           (* only cache the top cache_height part of the tree *)
-          Params.cache_sz
+          california_capacity lru_capacity
       in
 
       let t = { n_pages; dead_pages = []; header; fd; dir = root; cache } in
@@ -387,8 +333,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
-          ~filter:(fun content -> Page._kind content |> Common.Kind.to_depth |> fun _ -> true)
-          Params.cache_sz
+          ~filter:(fun content ->
+            Page._kind content |> Common.Kind.to_depth |> fun _ -> `California)
+          california_capacity lru_capacity
       in
       let header = Bytes.create Header.size |> Header.load in
       let store = { n_pages = 0; dead_pages = []; header; fd; dir = root; cache } in

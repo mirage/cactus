@@ -4,6 +4,16 @@
   (language c)
   (names pread pwrite))
  (public_name btree)
- (libraries mybentov repr unix hex mtime mtime.clock.os logs optint oracle)
+ (libraries
+  mybentov
+  repr
+  unix
+  hex
+  mtime
+  mtime.clock.os
+  logs
+  optint
+  oracle
+  lru)
  (preprocess
   (pps ppx_repr)))

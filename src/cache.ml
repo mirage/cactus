@@ -1,0 +1,121 @@
+include Cache_intf
+
+module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
+  type key = K.t
+
+  type value = V.t
+
+  module Lru = Lru.M.Make (K) (V)
+  module Hashtbl = Hashtbl.Make (K)
+
+  type t = {
+    california : value Hashtbl.t;
+    lru : Lru.t;
+    volatile : value Hashtbl.t;
+    flush : key -> value -> unit;
+    load : key -> value;
+    mutable filter : value -> [ `California | `Lru | `Volatile ];
+  }
+
+  let v ~flush ~load ~filter california_cap lru_cap =
+    {
+      flush;
+      load;
+      california = Hashtbl.create california_cap;
+      lru = Lru.create lru_cap;
+      volatile = Hashtbl.create 16;
+      filter;
+    }
+
+  let find t key =
+    match
+      (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)
+    with
+    (* Lru.find is equivalent to Hashtbl.find_opt *)
+    | Some value, None, None | None, None, Some value -> value
+    | None, Some value, None ->
+        Lru.promote key t.lru;
+        value
+    | None, None, None ->
+        let value = t.load key in
+        (match t.filter value with
+        | `California -> Hashtbl.add t.california key value
+        | `Lru -> (
+            Lru.add key value t.lru;
+            if Lru.weight t.lru > Lru.capacity t.lru then
+              match Lru.lru t.lru with
+              | Some (key, value) ->
+                  t.flush key value;
+                  Lru.drop_lru t.lru
+              | None -> failwith "Empty LRU is over capacity")
+        | `Volatile ->
+            Hashtbl.add t.volatile key value;
+            if Hashtbl.length t.volatile > 64 then (
+              Log.warn (fun reporter -> reporter "Not enough release");
+              assert false));
+        value
+    | _ -> failwith "Key loaded in several caches"
+
+  let reload t key =
+    match
+      (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)
+    with
+    | Some value, None, None -> (
+        match t.filter value with
+        | `California -> ()
+        | `Lru ->
+            Hashtbl.remove t.california key;
+            Lru.add key value t.lru
+        | `Volatile ->
+            Hashtbl.remove t.california key;
+            Hashtbl.add t.volatile key value)
+    | None, Some value, None -> (
+        match t.filter value with
+        | `California ->
+            Lru.remove key t.lru;
+            Hashtbl.add t.california key value
+        | `Lru -> ()
+        | `Volatile ->
+            Lru.remove key t.lru;
+            Hashtbl.add t.volatile key value)
+    | None, None, Some value -> (
+        match t.filter value with
+        | `California ->
+            Hashtbl.remove t.volatile key;
+            Hashtbl.add t.california key value
+        | `Lru ->
+            Hashtbl.remove t.volatile key;
+            Lru.add key value t.lru
+        | `Volatile -> ())
+    | None, None, None -> failwith "Key is not loaded"
+    | _ -> failwith "Key loaded in several caches"
+
+  let update_filter t ~filter =
+    t.filter <- filter;
+    Hashtbl.filter_map_inplace
+      (fun key value ->
+        if filter value = `California then Some value
+        else (
+          t.flush key value;
+          None))
+      t.california
+
+  let release t =
+    Hashtbl.iter t.flush t.volatile;
+    Hashtbl.clear t.volatile
+
+  let deallocate t key =
+    Hashtbl.remove t.california key;
+    Lru.remove key t.lru;
+    Hashtbl.remove t.volatile key
+
+  let clear t = Hashtbl.clear t.volatile
+
+  let full_clear t =
+    Hashtbl.clear t.volatile;
+    Hashtbl.clear t.california
+
+  let flush t =
+    Hashtbl.iter t.flush t.california;
+    release t
+end
