@@ -343,7 +343,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let get_address () =
       let open Common.Address in
       let buff = Bytes.create size in
-      !address |> to_t |> set buff ~off:0;
+      !address |> to_t |> set ~marker:Utils.nop buff ~off:0;
       Bytes.to_string buff
     in
     let rec create leftmost depth n =

@@ -11,7 +11,7 @@ module Make (Params : Params.S) (Store : Store.S) (Common : Field.COMMON) = stru
     let size = Params.max_key_sz
   end)
 
-  type t = bytes
+  type t = { buff : bytes; marker : unit -> unit }
 
   type offsets = { magic : int; kind : int; nentry : int; ndeadentry : int }
 
@@ -24,30 +24,31 @@ module Make (Params : Params.S) (Store : Store.S) (Common : Field.COMMON) = stru
 
   let size = List.fold_left ( + ) 0 sizes
 
-  let load buff = buff
+  let load ~marker buff = { buff; marker }
 
   let init t kind =
-    Magic.to_t Params.page_magic |> Magic.set t ~off:offsets.magic;
-    Kind.to_t kind |> Kind.set t ~off:offsets.kind;
-    Nentry.to_t 0 |> Nentry.set t ~off:offsets.nentry
+    Magic.to_t Params.page_magic |> Magic.set ~marker:t.marker t.buff ~off:offsets.magic;
+    Kind.to_t kind |> Kind.set ~marker:t.marker t.buff ~off:offsets.kind;
+    Nentry.to_t 0 |> Nentry.set ~marker:t.marker t.buff ~off:offsets.nentry
 
-  let g_magic t = Magic.get t ~off:offsets.magic
+  let g_magic t = Magic.get t.buff ~off:offsets.magic
 
-  let s_magic t magic = Magic.set t ~off:offsets.magic magic
+  let s_magic t magic = Magic.set ~marker:t.marker t.buff ~off:offsets.magic magic
 
-  let g_kind t = Kind.get t ~off:offsets.kind
+  let g_kind t = Kind.get t.buff ~off:offsets.kind
 
-  let s_kind t kind = Kind.set t ~off:offsets.kind kind
+  let s_kind t kind = Kind.set ~marker:t.marker t.buff ~off:offsets.kind kind
 
-  let g_nentry t = Nentry.get t ~off:offsets.nentry
+  let g_nentry t = Nentry.get t.buff ~off:offsets.nentry
 
-  let s_nentry t nentry = Nentry.set t ~off:offsets.nentry nentry
+  let s_nentry t nentry = Nentry.set ~marker:t.marker t.buff ~off:offsets.nentry nentry
 
-  let g_ndeadentry t = Ndeadentry.get t ~off:offsets.ndeadentry
+  let g_ndeadentry t = Ndeadentry.get t.buff ~off:offsets.ndeadentry
 
-  let s_ndeadentry t ndeadentry = Ndeadentry.set t ~off:offsets.ndeadentry ndeadentry
+  let s_ndeadentry t ndeadentry =
+    Ndeadentry.set ~marker:t.marker t.buff ~off:offsets.ndeadentry ndeadentry
 
-  let pp ppf t =
+  let pp ppf (t : t) =
     let open Fmt in
     pf ppf
       "@[<hov 1>magic:@ %a%a@]@;\
@@ -55,19 +56,19 @@ module Make (Params : Params.S) (Store : Store.S) (Common : Field.COMMON) = stru
        @[<hov 1>entry number:@ %a%a@]@;\
        @[<hov 1>dead entry number:@ %a%a@]"
       (Magic.pp_raw ~off:offsets.magic |> styled (`Fg `Magenta))
-      t
+      t.buff
       (Magic.pp |> styled (`Bg `Magenta) |> styled `Reverse)
       (g_magic t)
       (Kind.pp_raw ~off:offsets.kind |> styled (`Fg `Magenta))
-      t
+      t.buff
       (Kind.pp |> styled (`Bg `Magenta) |> styled `Reverse)
       (g_kind t)
       (Nentry.pp_raw ~off:offsets.nentry |> styled (`Fg `Magenta))
-      t
+      t.buff
       (Nentry.pp |> styled (`Bg `Magenta) |> styled `Reverse)
       (g_nentry t)
       (Ndeadentry.pp_raw ~off:offsets.ndeadentry |> styled (`Fg `Magenta))
-      t
+      t.buff
       (Ndeadentry.pp |> styled (`Bg `Magenta) |> styled `Reverse)
       (g_ndeadentry t)
 end

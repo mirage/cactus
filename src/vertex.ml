@@ -22,7 +22,7 @@ functor
     open Stats.Func
     open Stats.Nodes
 
-    type t = { store : store; header : Header.t; buff : bytes }
+    type t = { store : store; header : Header.t; buff : bytes; marker : unit -> unit }
 
     let depth =
       match Bound.kind with
@@ -65,9 +65,10 @@ functor
       tic stat_load;
       let page = Store.load store address in
       let buff = Page.buff page in
-      let header = Header.load buff in
+      let marker = Page.marker page in
+      let header = Header.load ~marker buff in
       tac stat_load;
-      { store; buff; header }
+      let t = { store; buff; header; marker } in
 
     module PP = struct
       open Fmt
@@ -103,11 +104,12 @@ functor
         match (kind : Field.kind) with Node _ -> Bound.kind = `Node | Leaf -> Bound.kind = `Leaf);
       let page = Store.load store address in
       let buff = Page.buff page in
-      let header = Header.load buff in
+      let marker = Page.marker page in
+      let header = Header.load ~marker buff in
       Header.init header kind;
       Store.reload store address;
       tac stat_create;
-      { store; header; buff }
+      { store; header; buff; marker }
 
     let clear _t _predicate = failwith "not finished"
 
@@ -264,9 +266,9 @@ functor
       if not (shadow || append) then shift t position;
 
       let off = Header.size + (position * entry_size) in
-      Common.Flag.to_t false |> Common.Flag.set t.buff ~off:(off + offsets.flag);
-      key |> Key.set t.buff ~off:(off + offsets.key);
-      bound |> Bound.set t.buff ~off:(off + offsets.bound);
+      Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
+      bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound);
 
       if append || not shadow then Header.s_nentry t.header (nentry t + 1 |> Header.Nentry.to_t);
       if nentry t > 2 * Params.fanout then shrink t;
@@ -276,7 +278,7 @@ functor
     let replace t k1 k2 =
       (* this function is only used in the context of a deletion, after a merge, to update the separator key *)
       let n = find_n t k1 in
-      k2 |> Key.set t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
+      k2 |> Key.set ~marker:t.marker t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
       if
         Key.compare k1 k2 < 0 && n < nentry t - 1 && Key.compare k2 (nth_key t (n + 1)) > 0
         (* sorted invariant is broken *)
@@ -292,7 +294,7 @@ functor
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then raise Not_found;
       let off = Header.size + (n * entry_size) in
-      Common.Flag.to_t true |> Common.Flag.set t.buff ~off:(off + offsets.flag);
+      Common.Flag.to_t true |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
 
     let merge t1 t2 mode =
@@ -335,7 +337,7 @@ functor
     let header_of_depth i =
       let open Header in
       let buff = Bytes.make size '\000' in
-      let header = load buff in
+      let header = load ~marker:Utils.nop buff in
       let kind : Field.kind = if i = 0 then Leaf else Node i in
       init header kind;
       s_nentry header @@ Nentry.to_t @@ Params.fanout;
@@ -356,7 +358,7 @@ functor
       else
         let open Header in
         let buff = Bytes.make size '\000' in
-        let header = load buff in
+        let header = load ~marker:Utils.nop buff in
         init header kind;
         s_nentry header @@ Nentry.to_t @@ n;
         Bytes.to_string buff
@@ -365,7 +367,7 @@ functor
       assert (
         match (kind : Field.kind) with Leaf -> Bound.kind = `Leaf | Node _ -> Bound.kind = `Node);
       let not_dead = Bytes.create Common.Flag.size in
-      Common.Flag.to_t false |> Common.Flag.set not_dead ~off:0;
+      Common.Flag.to_t false |> Common.Flag.set ~marker:Utils.nop not_dead ~off:0;
       let not_dead = Bytes.to_string not_dead in
       let kvs = List.map (( ^ ) not_dead) kvs in
       let header = migrate_header kind (List.length kvs) in

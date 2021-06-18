@@ -85,7 +85,7 @@ module type BOUND = sig
   (* what is bound in the vertex *)
   type t
 
-  val set : bytes -> off:int -> t -> unit
+  val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
 
   val get : bytes -> off:int -> t
 

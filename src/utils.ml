@@ -104,3 +104,5 @@ let from_b256 s =
   let rep = ref 0 in
   String.iter (fun c -> rep := Char.code c + (!rep * 256)) s;
   !rep
+
+let nop () = ()

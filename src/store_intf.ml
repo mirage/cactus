@@ -17,6 +17,8 @@ module type S = sig
 
     val buff : t -> bytes
 
+    val marker : t -> unit -> unit (* [marker page] is the function that marks [page] as dirty *)
+
     val flush : t -> unit
   end
   with type t = page

@@ -3,7 +3,8 @@ module type FIELD = sig
 
   type convert
 
-  val set : bytes -> off:int -> t -> unit
+  val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
+  (* marker is a function to mark the bytes as dirty *)
 
   val get : bytes -> off:int -> t
 

@@ -7,7 +7,7 @@ module type H = sig
 
   type t
 
-  val load : bytes -> t
+  val load : marker:(unit -> unit) -> bytes -> t
 
   val init : t -> Field.kind -> unit
 

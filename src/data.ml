@@ -29,7 +29,7 @@ module type K = sig
 
   val concat : t -> t -> t
 
-  val set : bytes -> off:int -> t -> unit
+  val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
 
   val get : bytes -> off:int -> t
 
@@ -50,7 +50,7 @@ module type V = sig
 
   val to_input : t -> input_value
 
-  val set : bytes -> off:int -> t -> unit
+  val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
 
   val get : bytes -> off:int -> t
 
@@ -108,7 +108,9 @@ functor
                 | _ -> None)
               (String.to_seq k1, String.to_seq k2))
 
-      let set buff ~off t = Bytes.blit_string t 0 buff off size
+      let set ~marker buff ~off t =
+        marker ();
+        Bytes.blit_string t 0 buff off size
 
       let get buff ~off = Bytes.sub_string buff off size
 
@@ -142,7 +144,9 @@ functor
 
       let size = InValue.encoded_size
 
-      let set buff ~off t = Bytes.blit_string t 0 buff off size
+      let set ~marker buff ~off t =
+        marker ();
+        Bytes.blit_string t 0 buff off size
 
       let get buff ~off = Bytes.sub_string buff off size
 

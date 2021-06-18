@@ -21,6 +21,10 @@ module MakeInt (Size : SIZE) = struct
             fun b ~off t -> t |> Int64.of_int |> set_int64_be b off )
     | n -> failwith (Fmt.str "Unsupported int length %i" n)
 
+  let set ~marker buff ~off t =
+    marker ();
+    set buff ~off t
+
   let from_t = Fun.id
 
   let to_t = Fun.id
@@ -36,7 +40,9 @@ module MakeBool (Size : SIZE) = struct
 
   let size = Size.size
 
-  let set b ~off t = Bytes.set b off (if t then '\255' else '\254')
+  let set ~marker b ~off t =
+    marker ();
+    Bytes.set b off (if t then '\255' else '\254')
 
   let get b ~off =
     match Bytes.get b off with
@@ -59,8 +65,9 @@ module MakeString (Size : SIZE) = struct
 
   let size = Size.size
 
-  let set b ~off t =
+  let set ~marker b ~off t =
     assert (String.length t = size);
+    marker ();
     Bytes.blit_string t 0 b off size
 
   let get b ~off = Bytes.sub_string b off size
@@ -123,7 +130,7 @@ module MakeCommon (Params : Params.S) : COMMON = struct
 
     let get b ~off = AsInt.get b ~off |> of_int
 
-    let set b ~off t = t |> to_int |> AsInt.set b ~off
+    let set ~marker b ~off t = t |> to_int |> AsInt.set ~marker b ~off
 
     let pp = Repr.pp t
 

@@ -139,11 +139,11 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
     let g_magic t = Magic.get t ~off:offsets.magic
 
-    let s_magic t magic = Magic.set t ~off:offsets.magic magic
+    let s_magic t magic = Magic.set ~marker:Utils.nop t ~off:offsets.magic magic
 
     let g_root t = Address.get t ~off:offsets.root
 
-    let s_root t root = Address.set t ~off:offsets.root root
+    let s_root t root = Address.set ~marker:Utils.nop t ~off:offsets.root root
 
     let init t ~root =
       s_magic t @@ Magic.to_t @@ Params.page_magic;
@@ -226,6 +226,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       tac stat_write
 
     let buff t = t.content.buff
+
+    let marker t () = t.content.dirty <- true
 
     let _buff0 = Bytes.make max_size '\000'
 
