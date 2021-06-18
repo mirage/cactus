@@ -3,3 +3,5 @@ oracle
 _build
 _bench
 .DS_Store
+setup.sh
+.gitignore
