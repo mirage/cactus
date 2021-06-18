@@ -118,9 +118,9 @@ let test_snapshot version () =
   let module MyBtree = (val get_tree version) in
   let root = v_to_s version // "tree_snapshot" in
   let tree = MyBtree.create ~root in
-  let keys = Array.init 501 (fun _ -> generate_key ()) in
+  let keys = Array.init 5001 (fun _ -> generate_key ()) in
 
-  for i = 1 to 500 do
+  for i = 1 to 5000 do
     MyBtree.add tree keys.(i) (i, i, i)
   done;
   MyBtree.snapshot tree;
@@ -146,24 +146,19 @@ let test_length version n () =
 let suite version =
   ( Fmt.str "%s tree" (v_to_s version),
     [
-      (* ("Single creation", `Quick, test_single_creation version);
-         ("Creation", `Quick, test_creation version);
-      *)
-      (*
-         ("Small addition", `Quick, test_addition version 100);
-         ("Small mem", `Quick, test_mem version 100);
-         ("Small retrieval", `Quick, test_retrieval version 100); *)
-      (* ("Addition", `Quick, test_addition version 1000);
-         ("Mem", `Quick, test_mem version 1000);
-      *)
-      (*
-         ("Retrieval", `Quick, test_retrieval version 1000);
-         ("Length", `Quick, test_length version 1_415); *)
+      ("Single creation", `Quick, test_single_creation version);
+      ("Creation", `Quick, test_creation version);
+      ("Small addition", `Quick, test_addition version 100);
+      ("Small mem", `Quick, test_mem version 100);
+      ("Small retrieval", `Quick, test_retrieval version 100);
+      ("Addition", `Quick, test_addition version 1000);
+      ("Mem", `Quick, test_mem version 1000);
+      ("Retrieval", `Quick, test_retrieval version 1000);
+      ("Length", `Quick, test_length version 1_415);
       ("Removal", `Quick, test_removal version 1000);
-      (* ("Clear", `Quick, test_clear version 1000);
-            ("Snapshot", `Quick, test_snapshot version);
-            ("Huge addition", `Slow, test_addition version 100_000);
-            ("Huge retrieval", `Slow, test_retrieval version 100_000);
-
-         ("Redundant additions", `Quick, test_redundant version 1000); *)
+      ("Clear", `Quick, test_clear version 1000);
+      ("Snapshot", `Quick, test_snapshot version);
+      ("Huge addition", `Slow, test_addition version 100_000);
+      ("Huge retrieval", `Slow, test_retrieval version 100_000);
+      ("Redundant additions", `Quick, test_redundant version 1000);
     ] )

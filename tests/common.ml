@@ -54,7 +54,9 @@ module MyBtree0 = struct
 
         let version = 0
 
-        let page_sz = 6050
+        let page_sz = 4050
+
+        let fanout = 30
 
         let debug = true
       end)
