@@ -57,15 +57,14 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let snapshot ?(depth = 0) t =
     (* for every node/leaf in [t] which are at least [depth] away from the leaves, [snapshot ~depth t], write in a file its rep as given by their corresponding pp function *)
-    let snap_page address page =
+    let rec snap_page path address =
+      let page = Store.load t.store address in
       let kind = Page.kind page in
       if Common.Kind.to_depth kind >= depth then
         match Common.Kind.from_t kind with
         | Leaf ->
             let leaf = Leaf.load t.store address in
-            let out_file =
-              open_out ((Store.Private.dir t.store // "pp_page_") ^ string_of_int address ^ ".ansi")
-            in
+            let out_file = open_out (path // Fmt.str "pp_page_%i.ansi" address) in
             let formatter = out_file |> Format.formatter_of_out_channel in
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." Leaf.pp leaf;
@@ -73,16 +72,15 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             Store.release_ro t.store
         | Node _n ->
             let node = Node.load t.store address in
-            let out_file =
-              open_out ((Store.Private.dir t.store // "pp_page_") ^ string_of_int address ^ ".ansi")
-            in
+            let out_file = open_out (path // Fmt.str "pp_page_%i.ansi" address) in
             let formatter = out_file |> Format.formatter_of_out_channel in
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." (Node.pp |> Fmt.vbox) node;
-            close_out out_file
+            close_out out_file;
+            Unix.mkdir (path // Fmt.str "%i" address) 0o777;
+            Node.iter node (fun _key addr -> snap_page (path // Fmt.str "%i" address) addr)
     in
-    flush t;
-    Store.iter t.store snap_page;
+    snap_page (Store.Private.dir t.store) (Store.root t.store);
     let out_header = open_out (Store.Private.dir t.store // "pp_header.ansi") in
     let formatter = out_header |> Format.formatter_of_out_channel in
     Fmt.set_style_renderer formatter `Ansi_tty;
