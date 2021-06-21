@@ -187,7 +187,7 @@ module Make (Config : CONFIG) = struct
         exec = find_random;
         dependency = Some "replace_random";
         kind = `R;
-        speed = `Quick;
+        speed = `Slow;
       };
       {
         name = "find_absent";
