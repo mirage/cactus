@@ -74,7 +74,7 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
         | `California ->
             Lru.remove key t.lru;
             Hashtbl.add t.california key value
-        | `Lru -> ()
+        | `Lru -> Lru.promote key t.lru
         | `Volatile ->
             Lru.remove key t.lru;
             Hashtbl.add t.volatile key value)

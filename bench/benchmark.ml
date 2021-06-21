@@ -133,7 +133,10 @@ module Make (Config : CONFIG) = struct
     let res =
       Results.run ~entry_sz:(config.key_sz + config.value_sz) ~nb_entries:n (benchmark.exec tree)
     in
-    if writer then Btree.flush tree;
+    if writer then (
+      Logs.app (fun reporter ->
+          reporter "Cache size is %i Mb" (Btree.Private.cache_size tree / 1_000_000));
+      Btree.flush tree);
     res
 
   let suite =

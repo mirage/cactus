@@ -390,6 +390,8 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
     let store tree = tree.store
 
+    let cache_size tree = Store.Private.cache_size tree.store
+
     let pp t ppf address =
       let page = Store.load t.store address in
       match Page.kind page |> Common.Kind.from_t with

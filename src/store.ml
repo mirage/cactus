@@ -372,6 +372,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
   module Private = struct
     let dir t = t.dir
 
+    let cache_size t = (t.cache |> Obj.repr |> Obj.reachable_words) * Sys.word_size / 8
+
     let write t s =
       let l = String.length s in
       let write_size = Unix.write_substring t.fd s 0 l in

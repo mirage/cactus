@@ -59,6 +59,8 @@ module type S = sig
   module Private : sig
     val dir : t -> string
 
+    val cache_size : t -> int
+
     val write : t -> string -> unit
 
     val init_migration : t -> unit

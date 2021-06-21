@@ -90,6 +90,8 @@ module type S = sig
 
     val go_to_leaf : t -> key -> int list
 
+    val cache_size : t -> int
+
     val pp : t -> int Fmt.t
   end
 end
