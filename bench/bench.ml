@@ -4,11 +4,13 @@ let _ = Memtrace.trace_if_requested ()
 
 let stable_v = 2 (* last stable version number *)
 
-let init () =
-  Stats.Btree.setup_log [ "add"; "find"; "mem" ];
-  Stats.Nodes.setup_log [ "load"; "split"; "add"; "find" ];
-  Stats.Store.setup_log [ "load"; "io read"; "io write"; "release" ];
-  Stats.Utils.setup_log [ "binary-search" ];
+let init with_profiling =
+  if with_profiling then (
+    Stats.Btree.setup_log [ "add"; "find"; "mem" ];
+    Stats.Nodes.setup_log [ "load"; "split"; "add"; "find" ];
+    Stats.Store.setup_log [ "load"; "io read"; "io write"; "release" ];
+    Stats.Utils.setup_log [ "binary-search" ])
+  else Stats.Store.setup_log [ "io read"; "io write" ];
   flush stdout;
   Printexc.record_backtrace true;
   Utils.chdir "_bench";
@@ -111,7 +113,7 @@ struct
   let run () =
     if args.version then Fmt.pr "Btree version %i@." args.switch
     else (
-      init ();
+      init args.with_profiling;
       Fmt.pr "%a@." pp_config config;
       let suite =
         if args.minimal then Benchmark.suite |> List.filter Benchmark.minimal_filter
