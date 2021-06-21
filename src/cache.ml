@@ -27,6 +27,8 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
       filter;
     }
 
+  let flag = ref true
+
   let find t key =
     match
       (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)
@@ -40,9 +42,12 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
         let value = t.load key in
         (match t.filter value with
         | `California -> Hashtbl.add t.california key value
-        | `Lru -> (
+        | `Lru ->
             Lru.add key value t.lru;
-            if Lru.weight t.lru > Lru.capacity t.lru then
+            if Lru.weight t.lru > Lru.capacity t.lru then (
+              if !flag then (
+                Log.warn (fun reporter -> reporter "LRU is filled");
+                flag := false);
               match Lru.lru t.lru with
               | Some (key, value) ->
                   t.flush key value;
