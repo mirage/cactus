@@ -135,7 +135,7 @@ module Make (Config : CONFIG) = struct
     in
     if writer then (
       Logs.app (fun reporter ->
-          reporter "Cache size is %i Mb" (Btree.Private.cache_size tree / 1_000_000));
+          reporter "Used cache size is %i MB" (Btree.Private.cache_size tree / 1_000_000));
       Btree.flush tree);
     res
 

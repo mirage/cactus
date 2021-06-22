@@ -69,13 +69,13 @@ let pp ppf t =
   Format.fprintf ppf
     "Total time: %fs@;\
      Operations rate: %f op/s@;\
-     Transfer rate: %f Mb/s@;\
+     Transfer rate: %f MB/s@;\
      Read amplification in syscalls: %f@;\
      Read amplification in bytes: %f@;\
      Write amplification in syscalls: %f@;\
      Write amplification in bytes: %f@;\
      Tree density: %f@;\
-     Max memory usage : %i Mb" t.perf.time t.perf.ops_per_sec t.perf.mbs_per_sec
+     Max memory usage : %i MB" t.perf.time t.perf.ops_per_sec t.perf.mbs_per_sec
     t.perf.read_amplification_calls t.perf.read_amplification_size t.perf.write_amplification_calls
     t.perf.write_amplification_size t.perf.tree_density
     (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000)

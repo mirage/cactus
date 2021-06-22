@@ -23,10 +23,10 @@ let pp_config ppf config =
   in
   Fmt.pf ppf
     "@[<v 2>Configuration@;\
-     Key size: %i b@;\
-     Value size: %i b@;\
-     Cache size: %i Mb@;\
-     Page size: %i b@;\
+     Key size: %i bytes@;\
+     Value size: %i bytes@;\
+     Cache size: %i MB@;\
+     Page size: %i bytes@;\
      Start size : %i bindings@;\
      Fanout: %i@;\
      Debug: %b@;\
@@ -180,7 +180,7 @@ let fanout =
   Arg.(value & opt int 64 & info [ "f"; "fanout" ] ~env ~doc)
 
 let cache_size =
-  let doc = "The size in Mb of available memory" in
+  let doc = "The size in MB of available memory" in
   let env = env_var "CACHE_SIZE" in
   Arg.(value & opt int 500 & info [ "c"; "cache" ] ~env ~doc)
 
