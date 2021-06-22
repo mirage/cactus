@@ -3,7 +3,7 @@ module Span = Mtime.Span
 module Func = struct
   type t = {
     mutable counter : int;
-    mutable histo : Mybentov.histogram;
+    histo : Mybentov.histogram;
     mutable span : Mtime.span;
     mutable last_counter : int;
     mutable last_log : Mtime.t;
@@ -32,7 +32,7 @@ module Func = struct
 
   let reset t =
     t.counter <- 0;
-    t.histo <- Mybentov.create 30;
+    Mybentov.clear t.histo;
     t.last_counter <- 0;
     t.last_log <- Mtime_clock.now ();
     t.span <- Mtime.Span.zero;
@@ -45,25 +45,30 @@ module Func = struct
     t.tic <- `CanTac (Mtime_clock.now ())
 
   let tac t =
-    match t.tic with
-    | `CantTac -> failwith "tac must follow tic"
-    | `CanTac before ->
-        let after = Mtime_clock.now () in
-        let add_span = Mtime.span before after in
-        t.span <- Mtime.Span.add t.span add_span;
+    match t.logger with
+    | `NoLog -> ()
+    | `Log logger -> (
+        match t.tic with
+        | `CantTac -> failwith "tac must follow tic"
+        | `CanTac before ->
+            t.tic <- `CantTac;
+            let after = Mtime_clock.now () in
+            let add_span = Mtime.span before after in
+            t.span <- Mtime.Span.add t.span add_span;
 
-        let point = add_span |> Mtime.Span.to_us |> Float.log in
-        (* use logarithm to spread values *)
-        Mybentov.add point t.histo;
+            let point = add_span |> Mtime.Span.to_us |> Float.log in
+            (* use logarithm to spread values *)
+            Mybentov.add point t.histo;
 
-        t.counter <- t.counter + 1;
-        if
-          t.counter > t.last_counter + 1_000 && Mtime.span t.last_log after |> Mtime.Span.to_s > 0.1
-        then (
-          let () = match t.logger with `NoLog -> () | `Log logger -> logger t.histo in
-          t.histo <- Mybentov.create 30;
-          t.last_counter <- t.counter;
-          t.last_log <- after)
+            t.counter <- t.counter + 1;
+            if
+              t.counter > t.last_counter + 1_000
+              && Mtime.span t.last_log after |> Mtime.Span.to_s > 0.1
+            then (
+              logger t.histo;
+              Mybentov.clear t.histo;
+              t.last_counter <- t.counter;
+              t.last_log <- after))
 
   let setup_log t logger = t.logger <- `Log logger
 
