@@ -5,7 +5,14 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
 
   type value = V.t
 
-  module Lru = Lru.M.Make (K) (V)
+  module Lru = struct
+    include Lru.M.Make (K) (V)
+
+    exception EmptyLru
+
+    let unsafe_lru t = match lru t with None -> raise EmptyLru | Some (_, v) -> v
+  end
+
   module Hashtbl = Hashtbl.Make (K)
 
   type t = {
@@ -13,7 +20,7 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
     lru : Lru.t;
     volatile : value Hashtbl.t;
     flush : key -> value -> unit;
-    load : key -> value;
+    load : ?available:value -> key -> value;
     mutable filter : value -> [ `California | `Lru | `Volatile ];
   }
 
@@ -29,6 +36,14 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
 
   let flag = ref true
 
+  module Queue = struct
+    include Queue
+
+    let push v q = if length q < 64 then push v q
+  end
+
+  let availables = Queue.create ()
+
   let find t key =
     match
       (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)
@@ -39,7 +54,11 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
         Lru.promote key t.lru;
         value
     | None, None, None ->
-        let value = t.load key in
+        let value =
+          match Queue.is_empty availables with
+          | true -> t.load key
+          | false -> t.load ~available:(Queue.pop availables) key
+        in
         (match t.filter value with
         | `California -> Hashtbl.add t.california key value
         | `Lru ->
@@ -51,6 +70,7 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
               match Lru.lru t.lru with
               | Some (key, value) ->
                   t.flush key value;
+                  Queue.push (Lru.unsafe_lru t.lru) availables;
                   Lru.drop_lru t.lru
               | None -> failwith "Empty LRU is over capacity")
         | `Volatile ->
@@ -106,7 +126,11 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
       t.california
 
   let release t =
-    Hashtbl.iter t.flush t.volatile;
+    Hashtbl.iter
+      (fun k v ->
+        Queue.push v availables;
+        t.flush k v)
+      t.volatile;
     Hashtbl.clear t.volatile
 
   let deallocate t key =

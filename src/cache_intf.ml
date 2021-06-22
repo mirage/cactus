@@ -9,7 +9,8 @@ module type CALIFORNIA = sig
 
   val v :
     flush:(key -> value -> unit) ->
-    load:(key -> value) ->
+    load:(?available:value -> key -> value) ->
+    (* the [value] argument can be useful to reutilise memory precedently allocated to some other value *)
     filter:(value -> [ `California | `Lru | `Volatile ]) ->
     int ->
     int ->

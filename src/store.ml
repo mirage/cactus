@@ -117,18 +117,24 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
     let real_offset address = max_size * address
 
-    let load fd address =
+    let _load fd address buff =
       tic stat_load;
-      let buff = Bytes.create max_size in
       let start = real_offset address in
-      tic stat_io_r;
       Unix.lseek fd start Unix.SEEK_SET |> ignore;
       Utils.assert_read fd buff 0 max_size;
-      tac stat_io_r;
       increment stat_io_r "nb_bytes" max_size;
       let content = { buff; dirty = false } in
       tac stat_load;
       content
+
+    let load fd address =
+      let buff = Bytes.create max_size in
+      _load fd address buff
+
+    let load_using fd ?available address =
+      match available with
+      | None -> _load fd address (Bytes.create max_size)
+      | Some content -> _load fd address content.buff
 
     let _flush fd address content =
       if content.dirty then (
@@ -316,7 +322,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       in
 
       let cache =
-        CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
+        CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load_using fd)
           ~filter:(fun content ->
             let depth = Page._kind content |> Common.Kind.to_depth in
             if tree_height - depth <= cache_height then `California
@@ -332,7 +338,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     else
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
-        CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load fd)
+        CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load_using fd)
           ~filter:(fun content ->
             Page._kind content |> Common.Kind.to_depth |> fun _ -> `California)
           california_capacity lru_capacity
