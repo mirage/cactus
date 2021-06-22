@@ -42,7 +42,7 @@ module Func = struct
 
   let tic t =
     (* TODO : use counters instead and trust ocaml gc ? *)
-    t.tic <- `CanTac (Mtime_clock.now ())
+    match t.logger with `NoLog -> () | `Log _ -> t.tic <- `CanTac (Mtime_clock.now ())
 
   let tac t =
     match t.logger with
