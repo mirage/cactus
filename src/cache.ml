@@ -146,5 +146,6 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
 
   let flush t =
     Hashtbl.iter t.flush t.california;
+    Lru.iter t.flush t.lru;
     release t
 end
