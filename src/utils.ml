@@ -74,7 +74,7 @@ let assert_read fd buff off length =
   let read_sz = really_read fd buff off length in
   if read_sz <> length then (
     Log.err @@ fun reporter ->
-    reporter "Tried reading %i but could only read %i" length read_sz;
+    reporter "Tried reading %i bytes but read only %i bytes" length read_sz;
     assert false);
   Index_stats.add_read length;
   increment stat_io_r "nb_bytes" length;
@@ -85,7 +85,33 @@ let assert_write fd buff off length =
   let write_sz = really_write fd buff off length in
   if write_sz <> length then (
     Log.err @@ fun reporter ->
-    reporter "Tried writing %i but could only write %i" length write_sz;
+    reporter "Tried writing %i bytes wrote only %i bytes" length write_sz;
+    assert false);
+  Index_stats.add_write length;
+  increment stat_io_w "nb_bytes" length;
+  tac stat_io_w
+
+let assert_pread fd buffer off length =
+  tic stat_io_r;
+  let read_sz =
+    Syscalls.pread ~fd ~fd_offset:(off |> Optint.Int63.of_int) ~buffer ~buffer_offset:0 ~length
+  in
+  if read_sz <> length then (
+    Log.err @@ fun reporter ->
+    reporter "Tried reading %i bytes but read only %i bytes" length read_sz;
+    assert false);
+  Index_stats.add_read length;
+  increment stat_io_r "nb_bytes" length;
+  tac stat_io_r
+
+let assert_pwrite fd buffer off length =
+  tic stat_io_w;
+  let write_sz =
+    Syscalls.pwrite ~fd ~fd_offset:(off |> Optint.Int63.of_int) ~buffer ~buffer_offset:0 ~length
+  in
+  if write_sz <> length then (
+    Log.err @@ fun reporter ->
+    reporter "Tried writing %i bytes but wrote only %i bytes" length write_sz;
     assert false);
   Index_stats.add_write length;
   increment stat_io_w "nb_bytes" length;

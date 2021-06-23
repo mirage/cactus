@@ -1,9 +1,4 @@
-(* TODO : allocation should check for dead pages before allocating a new one*)
-(* TODO : Utils.assert_write *)
-
 include Store_intf
-
-exception Page_overflow
 
 module type HEADER = sig
   module Common : Field.COMMON
@@ -120,8 +115,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let _load fd address buff =
       tic stat_load;
       let start = real_offset address in
-      Unix.lseek fd start Unix.SEEK_SET |> ignore;
-      Utils.assert_read fd buff 0 max_size;
+      Utils.assert_pread fd buff start max_size;
       increment stat_io_r "nb_bytes" max_size;
       let content = { buff; dirty = false } in
       tac stat_load;
@@ -151,14 +145,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
         increment stat_io_w "nb_bytes" write_size)
 
     let flush t = _flush t.store.fd t.address t.content
-
-    let write t ?(with_flush = false) ~offset buff =
-      tic stat_write;
-      if offset + Bytes.length buff > max_size then raise Page_overflow;
-      t.content.dirty <- true;
-      Bytes.blit buff 0 t.content.buff offset (Bytes.length buff);
-      if with_flush then flush t;
-      tac stat_write
 
     let buff t = t.content.buff
 
@@ -235,10 +221,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     t.dead_pages <- address :: t.dead_pages;
     CaliforniaCache.deallocate t.cache address
 
-  let rewrite_header t =
-    (* page 0 is reserved for the header *)
-    let page = load t 0 in
-    Page.write page ~with_flush:true ~offset:0 (Header.dump t.header)
+  let flush_header t = Utils.assert_pwrite t.fd (Header.dump t.header) 0 Header.size
 
   let mkdir dirname =
     let rec aux dir k =
@@ -274,7 +257,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
   let reroot t address =
     ignore CaliforniaCache.update_filter;
     address |> Common.Address.to_t |> Header.s_root t.header;
-    rewrite_header t;
+    flush_header t;
     check_height t;
     let tree_height = address |> load t |> Page.kind |> Common.Kind.to_depth in
     if tree_height > cache_height then
@@ -306,8 +289,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       let fd = Unix.openfile file Unix.[ O_RDWR ] 0o600 in
 
       let buff = Bytes.create Header.size in
-      Unix.lseek fd 0 Unix.SEEK_SET |> ignore;
-      Utils.assert_read fd buff 0 Header.size;
+      Utils.assert_pread fd buff 0 Header.size;
       let header = Header.load buff in
 
       let file_size = fd |> Unix.fstat |> fun x -> x.st_size in
@@ -349,7 +331,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       ignore (allocate store) (* create page_0 for the header *);
       let root = allocate store in
       Header.init header ~root;
-      rewrite_header store;
+      flush_header store;
       store
 
   let clear t =
@@ -357,8 +339,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     ignore (allocate t);
     (* create page_0 for the header *)
     allocate t |> Common.Address.to_t |> Header.s_root t.header;
-    rewrite_header t;
-    fsync t;
     CaliforniaCache.full_clear t.cache
 
   let close t =
