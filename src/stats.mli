@@ -83,15 +83,7 @@ end
 module Store : sig
   include Common
 
-  val stat_allocate : Func.t
-
-  val stat_load : Func.t
-
-  val stat_gc : Func.t
-
-  val stat_read : Func.t
-
-  val stat_write : Func.t
+  val stat_flush : Func.t
 
   val stat_io_r : Func.t
   (** read syscalls *)
@@ -100,8 +92,6 @@ module Store : sig
   (** write syscalls *)
 
   val stat_fsync : Func.t
-
-  val stat_release : Func.t
 end
 
 module Utils : sig

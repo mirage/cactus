@@ -113,12 +113,10 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let real_offset address = max_size * address
 
     let _load fd address buff =
-      tic stat_load;
       let start = real_offset address in
       Utils.assert_pread fd buff start max_size;
       increment stat_io_r "nb_bytes" max_size;
       let content = { buff; dirty = false } in
-      tac stat_load;
       content
 
     let load fd address =
@@ -185,24 +183,21 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     Unix.fsync t.fd;
     tac stat_fsync
 
-  let release t =
-    tic stat_release;
-    CaliforniaCache.release t.cache;
-    tac stat_release
+  let release t = CaliforniaCache.release t.cache
 
   let release_ro t = CaliforniaCache.clear t.cache
 
   let flush t =
-    Log.debug (fun reporter -> reporter "Running flush");
+    (* Log.debug (fun reporter -> reporter "Running flush");*)
+    tic stat_flush;
     CaliforniaCache.flush t.cache;
-    fsync t
+    tac stat_flush
 
   let load t address = { address; store = t; content = CaliforniaCache.find t.cache address }
 
   let reload t address = CaliforniaCache.reload t.cache address
 
   let allocate t =
-    tic stat_allocate;
     let ret =
       match t.dead_pages with
       | [] ->
@@ -214,7 +209,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
           t.dead_pages <- q;
           r
     in
-    tac stat_allocate;
     ret
 
   let deallocate t address =
@@ -265,10 +259,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
           let depth = Page._kind content |> Common.Kind.to_depth in
           if tree_height - depth <= cache_height then `California
           else if tree_height - depth = cache_height + 1 then `Lru
-          else `Volatile);
+          else `Volatile)
 
-    (* only cache the top cache_height part of the tree *)
-    fsync t
+  (* only cache the top cache_height part of the tree *)
 
   let init ~root =
     Log.info (fun reporter -> reporter "Cache height is %i" cache_height);

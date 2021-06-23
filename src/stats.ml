@@ -151,15 +151,7 @@ module Nodes_ = struct
 end
 
 module Store_ = struct
-  let stat_allocate = Func.v ~counter_names:[]
-
-  let stat_load = Func.v ~counter_names:[]
-
-  let stat_gc = Func.v ~counter_names:[]
-
-  let stat_read = Func.v ~counter_names:[]
-
-  let stat_write = Func.v ~counter_names:[]
+  let stat_flush = Func.v ~counter_names:[]
 
   (** syscalls *)
   let stat_io_r = Func.v ~counter_names:[ "nb_bytes" ]
@@ -168,25 +160,9 @@ module Store_ = struct
 
   let stat_fsync = Func.v ~counter_names:[]
 
-  let stat_release = Func.v ~counter_names:[]
-
   let name_stats =
-    let names =
-      [ "allocate"; "load"; "gc"; "read"; "write"; "io read"; "io write"; "fsync"; "release" ]
-    in
-    let stats =
-      [
-        stat_allocate;
-        stat_load;
-        stat_gc;
-        stat_read;
-        stat_write;
-        stat_io_r;
-        stat_io_w;
-        stat_fsync;
-        stat_release;
-      ]
-    in
+    let names = [ "flush"; "io read"; "io write"; "fsync" ] in
+    let stats = [ stat_flush; stat_io_r; stat_io_w; stat_fsync ] in
     List.map2 (fun a b -> (a, b)) names stats
 
   let name = "Store"

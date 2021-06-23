@@ -48,6 +48,8 @@ module type S = sig
 
   val flush : t -> unit
 
+  val fsync : t -> unit
+
   val clear : t -> unit
 
   val close : t -> unit

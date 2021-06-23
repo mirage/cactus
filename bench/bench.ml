@@ -8,9 +8,9 @@ let init with_profiling =
   if with_profiling then (
     Stats.Btree.setup_log [ "add"; "find"; "mem" ];
     Stats.Nodes.setup_log [ "load"; "split"; "add"; "find" ];
-    Stats.Store.setup_log [ "load"; "io read"; "io write"; "release" ];
+    Stats.Store.setup_log [ "flush"; "io read"; "io write" ];
     Stats.Utils.setup_log [ "binary-search" ])
-  else Stats.Store.setup_log [ "io read"; "io write" ];
+  else Stats.Store.setup_log [ "io read"; "io write"; "flush" ];
   flush stdout;
   Printexc.record_backtrace true;
   Utils.chdir "_bench";
