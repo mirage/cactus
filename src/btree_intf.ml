@@ -20,8 +20,11 @@ module type S = sig
 
   val empty_cache : unit -> cache
 
-  val create : ?cache:cache -> string -> t
+  val create : ?cache:cache -> ?record:string -> string -> t
   (* [create root] creates a btree storage in directory [root] *)
+
+  val replay : string -> t -> unit
+  (* [replay path] replays the operations stored in file [path] *)
 
   val init : root:string -> int -> read:(int -> string) -> t
   (** [init ~root n ~read] performs a batch initialisation. [read] is an iterator-like function :

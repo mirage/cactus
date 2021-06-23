@@ -17,6 +17,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   module Page = Store.Page
   module Leaf = Leaf.Make (Params) (Store) (Key) (Value)
   module Node = Node.Make (Params) (Store) (Key)
+  module Recorder = Recorder.Make (InKey) (InValue)
 
   open Stats.Func
   (** STAT WRAPPERS **)
@@ -27,7 +28,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let min_key = Key.min
 
-  type t = { store : Store.t; mutable instances : int }
+  type t = { store : Store.t; mutable instances : int; recorder : Recorder.t option }
 
   type cache = (string, t) Hashtbl.t
 
@@ -38,7 +39,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     caches := cache :: !caches;
     cache
 
-  let flush t = Store.flush t.store
+  let flush t =
+    let () = match t.recorder with None -> () | Some recorder -> Recorder.record recorder Flush in
+    Store.flush t.store
 
   let clear t =
     Log.debug (fun reporter -> reporter "clearing");
@@ -103,7 +106,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let root = Store.root tree.store in
     aux root
 
-  let create ?cache root =
+  let create ?cache ?record root =
     Log.info (fun reporter -> reporter "Btree version %i (15 Jun. 2021)" Size.version);
     Log.debug (fun reporter -> reporter "Btree at root %s" root);
     let t =
@@ -115,7 +118,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           t
       | _ ->
           let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
-          let t = { store = Store.init ~root; instances = 1 } in
+          let store = Store.init ~root in
+          let recorder = match record with None -> None | Some path -> Some (Recorder.v path) in
+          let t = { store; instances = 1; recorder } in
           if just_load then Log.debug (fun reporter -> length t |> reporter "Loading %i bindings")
           else (
             Leaf.init t.store (Store.root t.store) |> ignore;
@@ -142,7 +147,21 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let go_to_leaf = go_to_leaf tree key in
     let address = go_to_leaf (Store.root tree.store) in
     let leaf = Leaf.load tree.store address in
-    let ret = Leaf.find leaf key |> Value.to_input in
+    let ret =
+      try
+        let ret = Leaf.find leaf key |> Value.to_input in
+        match tree.recorder with
+        | None -> ret
+        | Some recorder ->
+            Recorder.record recorder (Find (inkey, true));
+            ret
+      with Not_found -> (
+        match tree.recorder with
+        | None -> raise Not_found
+        | Some recorder ->
+            Recorder.record recorder (Find (inkey, false));
+            raise Not_found)
+    in
     Store.release_ro tree.store;
     tac stat_find;
     ret
@@ -156,6 +175,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let ret = Leaf.mem leaf key in
     Store.release_ro tree.store;
     tac stat_mem;
+    let () =
+      match tree.recorder with
+      | None -> ()
+      | Some recorder -> Recorder.record recorder (Mem (inkey, ret))
+    in
     ret
 
   let path_to_leaf t key =
@@ -185,6 +209,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let add tree inkey invalue =
     tic stat_add;
+    let () =
+      match tree.recorder with
+      | None -> ()
+      | Some recorder -> Recorder.record recorder (Add (inkey, invalue))
+    in
     Index_stats.incr_nb_replace ();
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
@@ -306,6 +335,23 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     in
     iter f tree
 
+  let replay_op t (op : Recorder.op) =
+    match op with
+    | Add (k, v) -> add t k v
+    | Mem (k, b) ->
+        let b' = mem t k in
+        assert (b' = b)
+    | Flush -> flush t
+    | Find (k, b) -> (
+        try
+          find t k |> ignore;
+          assert b
+        with Not_found -> assert (not b))
+
+  let replay path t =
+    let seq = Recorder.replay path in
+    Seq.iter (replay_op t) seq
+
   let depth_of n =
     let rec aux h n = if n = 0 then h else aux (h + 1) (n / Params.fanout) in
     aux (-1) n
@@ -378,7 +424,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     create true depth n |> ignore;
     Store.Private.end_migration store (!address + 1) !address;
     incr address;
-    { store; instances = 1 }
+    { store; instances = 1; recorder = None }
 
   let pp ppf t =
     Fmt.pf ppf "@[<hov 2>ROOT OF THE TREE:@;%a@]" Leaf.pp (Leaf.load t.store (Store.root t.store))
