@@ -60,17 +60,9 @@ module MyBtree0 = struct
 
         let debug = true
       end)
-
-  let create ~root : t = create root
 end
 
-module type TREE = sig
-  include Btree.S
-
-  val create : root:string -> t
-end
-with type key = MyKey.t
- and type value = MyValue.t
+module type TREE = Btree.S with type key = MyKey.t and type value = MyValue.t
 
 let get_tree version = match version with `V0 -> (module MyBtree0 : TREE)
 

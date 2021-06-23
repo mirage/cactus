@@ -22,13 +22,7 @@ end
 
 module Input : Btree.Input.Size
 
-module type TREE = sig
-  include Btree.S
-
-  val create : root:string -> t
-end
-with type key = MyKey.t
- and type value = MyValue.t
+module type TREE = Btree.S with type key = MyKey.t and type value = MyValue.t
 
 val get_tree : [ `V0 ] -> (module TREE)
 

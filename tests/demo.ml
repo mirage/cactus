@@ -4,7 +4,7 @@ include Common
 
 let snapshot () =
   let module MyBtree = (val get_tree `V0) in
-  let tree = MyBtree.create ~root:"demo" in
+  let tree = MyBtree.create "demo" in
   let keys = Array.init 100 (fun _ -> generate_key ()) in
   for i = 1 to 99 do
     let key = keys.(i) in
