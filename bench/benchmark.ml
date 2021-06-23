@@ -42,7 +42,7 @@ module Make (Config : CONFIG) = struct
     iterator (fun i (k, v) ->
         if i > 0 && i mod 937 = 0 then prog 937L;
         Btree.add tree k v;
-        if with_flush then Btree.flush tree;
+        if with_flush || i mod 10_000 = 0 then Btree.flush tree;
         if config.sleep && Random.int n <= 3 then (
           Logs.info (fun reporter -> reporter "Sleeping%s" (String.make 30 ' '));
           Unix.sleep 5));
@@ -187,7 +187,7 @@ module Make (Config : CONFIG) = struct
         exec = find_random;
         dependency = Some "replace_random";
         kind = `R;
-        speed = `Slow;
+        speed = `Quick;
       };
       {
         name = "find_absent";
