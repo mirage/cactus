@@ -11,6 +11,8 @@ module type S = sig
 
   val record : t -> op -> unit
 
+  val close : t -> unit
+
   val replay : string -> op Seq.t
   (* [replay path] is the sequence of operations recorded in file [path] *)
 end

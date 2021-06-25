@@ -29,6 +29,10 @@ module Make (Key : Input.Key) (Value : Input.Value) = struct
         encode_int32 (Int32.of_int size) (output_string t.out);
         encode_bin op (output_string t.out)
 
+  let close t =
+    flush t.out;
+    close_out t.out
+
   let replay path =
     let in_ = open_in path in
     let step () =

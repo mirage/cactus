@@ -39,8 +39,12 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     caches := cache :: !caches;
     cache
 
+  let record t op =
+    let _record op rc = Recorder.record rc op in
+    Option.iter (_record op) t.recorder
+
   let flush t =
-    let () = match t.recorder with None -> () | Some recorder -> Recorder.record recorder Flush in
+    record t Flush;
     Store.flush t.store
 
   let clear t =
@@ -56,6 +60,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     if t.instances = 0 then (
       Log.info (fun reporter -> reporter "Closing %s/b.tree" (Store.Private.dir t.store));
       Store.close t.store;
+      Option.iter Recorder.close t.recorder;
       List.iter (fun cache -> Hashtbl.remove cache (Store.Private.dir t.store)) !caches)
 
   let snapshot ?(depth = 0) t =
@@ -150,17 +155,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let ret =
       try
         let ret = Leaf.find leaf key |> Value.to_input in
-        match tree.recorder with
-        | None -> ret
-        | Some recorder ->
-            Recorder.record recorder (Find (inkey, true));
-            ret
-      with Not_found -> (
-        match tree.recorder with
-        | None -> raise Not_found
-        | Some recorder ->
-            Recorder.record recorder (Find (inkey, false));
-            raise Not_found)
+        record t (Find (inkey, true));
+        ret
+      with Not_found ->
+        record t (Find (inkey, false));
+        raise Not_found
     in
     Store.release_ro tree.store;
     tac stat_find;
@@ -175,11 +174,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let ret = Leaf.mem leaf key in
     Store.release_ro tree.store;
     tac stat_mem;
-    let () =
-      match tree.recorder with
-      | None -> ()
-      | Some recorder -> Recorder.record recorder (Mem (inkey, ret))
-    in
+    record t (Mem (inkey, ret));
     ret
 
   let path_to_leaf t key =
@@ -209,11 +204,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let add tree inkey invalue =
     tic stat_add;
-    let () =
-      match tree.recorder with
-      | None -> ()
-      | Some recorder -> Recorder.record recorder (Add (inkey, invalue))
-    in
+    record t (Add (inkey, invalue));
     Index_stats.incr_nb_replace ();
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
