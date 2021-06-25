@@ -1,7 +1,12 @@
 let () = Printexc.record_backtrace true
 
 let make_suites version =
-  [ Migration.suite version; Treetest.suite version; Integritytest.suite version ]
+  [
+    Migration.suite version;
+    Treetest.suite version;
+    Integritytest.suite version;
+    Replaytest.suite version;
+  ]
 
 let () = Alcotest.run "Btree storage" ([ Utilstest.suite ] @ make_suites `V0)
 
