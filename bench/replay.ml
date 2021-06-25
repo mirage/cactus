@@ -32,7 +32,7 @@ let main trace _ =
   | Some trace ->
       let root = "_bench/replay" in
       let tree = Btree.create root in
-      Btree.replay trace tree
+      Btree.replay ~prog:true trace tree
 
 open Cmdliner
 

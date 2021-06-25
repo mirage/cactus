@@ -23,7 +23,7 @@ module type S = sig
   val create : ?cache:cache -> ?record:string -> string -> t
   (* [create root] creates a btree storage in directory [root] *)
 
-  val replay : string -> t -> unit
+  val replay : string -> ?prog:bool -> t -> unit
   (* [replay path] replays the operations stored in file [path] *)
 
   val init : root:string -> int -> read:(int -> string) -> t

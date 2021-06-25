@@ -326,22 +326,61 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     in
     iter f t
 
-  let replay_op t (op : Recorder.op) =
+  type total = { mutable add : int; mutable mem : int; mutable flush : int; mutable find : int }
+
+  let bar message total =
+    let w = if total = 0 then 1 else float_of_int total |> log10 |> floor |> int_of_float |> succ in
+    let pp fmt i = Format.fprintf fmt "%*Ld/%*d %s" w i w total "operations" in
+    let pp f = f ~width:(w + 1 + w + 1 + String.length "operations") pp in
+    Progress_unix.counter ~mode:`UTF8 ~total:(Int64.of_int total) ~message ~pp ()
+
+  let noop _ = ()
+
+  let replay_op ?prog t (op : Recorder.op) =
+    let bar_add, bar_find, bar_mem, bar_flush =
+      match prog with None -> (noop, noop, noop, noop) | Some prog -> prog
+    in
     match op with
-    | Add (k, v) -> add t k v
+    | Add (k, v) ->
+        add t k v;
+        bar_add 1L
     | Mem (k, b) ->
         let b' = mem t k in
-        assert (b' = b)
-    | Flush -> flush t
-    | Find (k, b) -> (
-        try
-          find t k |> ignore;
-          assert b
-        with Not_found -> assert (not b))
+        assert (b' = b);
+        bar_mem 1L
+    | Flush ->
+        flush t;
+        bar_flush 1L
+    | Find (k, b) ->
+        (try
+           find t k |> ignore;
+           assert b
+         with Not_found -> assert (not b));
+        bar_find 1L
 
-  let replay path t =
+  let count_ops seq =
+    let tot = { add = 0; find = 0; mem = 0; flush = 0 } in
+    let incr (op : Recorder.op) =
+      match op with
+      | Add _ -> tot.add <- succ tot.add
+      | Find _ -> tot.find <- succ tot.find
+      | Mem _ -> tot.mem <- succ tot.mem
+      | Flush -> tot.flush <- succ tot.flush
+    in
+    Seq.iter incr seq;
+    tot
+
+  let replay path ?(prog = false) t =
     let seq = Recorder.replay path in
-    Seq.iter (replay_op t) seq
+    let tot = count_ops seq in
+    let seq = Recorder.replay path in
+
+    if not prog then Seq.iter (replay_op t) seq
+    else
+      Progress_unix.(
+        with_reporters
+          (bar "add  " tot.add / bar "find " tot.find / bar "mem  " tot.mem / bar "flush" tot.flush))
+      @@ fun (((a, b), c), d) -> Seq.iter (replay_op ~prog:(a, b, c, d) t) seq
 
   let depth_of n =
     let rec aux h n = if n = 0 then h else aux (h + 1) (n / Params.fanout) in
