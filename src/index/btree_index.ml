@@ -25,8 +25,6 @@ module Make (Key : Key) (Value : Value) = struct
 
   let sync _t = raise (NotInBtree "sync")
 
-  let flush _t = ()
-
   let close ?immediately t =
     ignore immediately;
     close t
@@ -35,8 +33,7 @@ module Make (Key : Key) (Value : Value) = struct
 
   let replace ?overcommit t key value =
     ignore overcommit;
-    add t key value;
-    flush t
+    add t key value
 
   let v ?flush_callback ?cache ?fresh ?readonly ?throttle ~log_size root =
     ignore flush_callback;
@@ -44,7 +41,9 @@ module Make (Key : Key) (Value : Value) = struct
     ignore readonly;
     ignore throttle;
     ignore log_size;
-    match cache with None -> create root | Some cache -> create ~cache root
+    match cache with
+    | None -> create root
+    | Some cache -> create ~record:"small-trace.btree.repr" ~cache root
 
   let flush ?no_callback ?with_fsync t =
     ignore no_callback;
