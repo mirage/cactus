@@ -268,10 +268,6 @@ functor
       let position = find_position t key in
       let shadow = Key.equal (nth_key t position) key in
       let append = position >= nentry t in
-
-      if shadow then
-        Log.warn (fun reporter ->
-            reporter "Shadowing key %s." (key |> Key.debug_dump |> Hex.of_string |> Hex.show));
       if not (shadow || append) then shift t position;
 
       let off = Header.size + (position * entry_size) in
