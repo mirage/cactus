@@ -1,6 +1,7 @@
-(executable
- (name bench)
+(executables
+ (names bench replay)
  (libraries
+  encoding
   btree
   cmdliner
   mtime
