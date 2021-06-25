@@ -95,20 +95,20 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Fmt.pf formatter "%a@." Store.pp_header t.store;
     close_out out_header
 
-  let length tree =
+  let length t =
     let rec aux address =
-      let page = Store.load tree.store address in
+      let page = Store.load t.store address in
       match Page.kind page |> Common.Kind.from_t with
       | Leaf ->
-          let leaf = Leaf.load tree.store address in
+          let leaf = Leaf.load t.store address in
           let ret = Leaf.length leaf in
-          Store.release_ro tree.store;
+          Store.release_ro t.store;
           ret
       | Node _depth ->
-          let node = Node.load tree.store address in
+          let node = Node.load t.store address in
           Node.fold_left (fun acc _key address -> acc + aux address) 0 node
     in
-    let root = Store.root tree.store in
+    let root = Store.root t.store in
     aux root
 
   let create ?cache ?record root =
@@ -138,20 +138,20 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
         t
     | None -> t
 
-  let rec go_to_leaf tree key address =
-    let page = Store.load tree.store address in
+  let rec go_to_leaf t key address =
+    let page = Store.load t.store address in
     match Page.kind page |> Common.Kind.from_t with
     | Leaf -> address
     | Node _depth ->
-        let node = Node.load tree.store address in
-        go_to_leaf tree key (Node.find node key)
+        let node = Node.load t.store address in
+        go_to_leaf t key (Node.find node key)
 
-  let find tree inkey =
+  let find t inkey =
     tic stat_find;
     let key = Key.of_input inkey in
-    let go_to_leaf = go_to_leaf tree key in
-    let address = go_to_leaf (Store.root tree.store) in
-    let leaf = Leaf.load tree.store address in
+    let go_to_leaf = go_to_leaf t key in
+    let address = go_to_leaf (Store.root t.store) in
+    let leaf = Leaf.load t.store address in
     let ret =
       try
         let ret = Leaf.find leaf key |> Value.to_input in
@@ -161,18 +161,18 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
         record t (Find (inkey, false));
         raise Not_found
     in
-    Store.release_ro tree.store;
+    Store.release_ro t.store;
     tac stat_find;
     ret
 
-  let mem tree inkey =
+  let mem t inkey =
     tic stat_mem;
     let key = Key.of_input inkey in
-    let go_to_leaf = go_to_leaf tree key in
-    let address = go_to_leaf (Store.root tree.store) in
-    let leaf = Leaf.load tree.store address in
+    let go_to_leaf = go_to_leaf t key in
+    let address = go_to_leaf (Store.root t.store) in
+    let leaf = Leaf.load t.store address in
     let ret = Leaf.mem leaf key in
-    Store.release_ro tree.store;
+    Store.release_ro t.store;
     tac stat_mem;
     record t (Mem (inkey, ret));
     ret
@@ -202,13 +202,13 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     in
     aux [] (Store.root t.store)
 
-  let add tree inkey invalue =
+  let add t inkey invalue =
     tic stat_add;
     record t (Add (inkey, invalue));
     Index_stats.incr_nb_replace ();
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
-    let path = path_to_leaf tree key in
+    let path = path_to_leaf t key in
     let leaf_address = List.hd path in
 
     let rec split_nodes nodes promoted allocated_address =
@@ -216,38 +216,38 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | [] ->
           (* this case happens only when no nodes are there in the first place *and* the leaf has overflowed
              This means that the tree is a single leaf, and we have to create a new root on top of it *)
-          let root = Node.create tree.store Common.Kind.(of_depth 1 |> from_t) in
+          let root = Node.create t.store Common.Kind.(of_depth 1 |> from_t) in
           Node.add root min_key leaf_address;
           Node.add root promoted allocated_address;
-          Store.reroot tree.store (Node.self_address root);
+          Store.reroot t.store (Node.self_address root);
           Log.info (fun reporter -> reporter "Btree height increases to 1")
       | [ address ] ->
           (* there are no nodes above : we are at the root *)
-          let root = Node.load tree.store address in
+          let root = Node.load t.store address in
           Node.add root promoted allocated_address;
           if Node.overflow root then (
             let promoted, allocated = Node.split root in
             let new_root =
-              Node.create tree.store Common.Kind.(of_depth (1 + Node.depth root) |> from_t)
+              Node.create t.store Common.Kind.(of_depth (1 + Node.depth root) |> from_t)
             in
             Node.add new_root min_key address;
             Node.add new_root promoted (Node.self_address allocated);
-            Store.reroot tree.store (Node.self_address new_root);
+            Store.reroot t.store (Node.self_address new_root);
             Log.info (fun reporter -> reporter "Btree height increases to %i" (Node.depth new_root)))
       | address :: nodes ->
-          let node = Node.load tree.store address in
+          let node = Node.load t.store address in
           Node.add node promoted allocated_address;
           if Node.overflow node then
             let promoted, allocated = Node.split node in
             split_nodes nodes promoted (Node.self_address allocated)
     in
 
-    let leaf = Leaf.load tree.store leaf_address in
+    let leaf = Leaf.load t.store leaf_address in
     Leaf.add leaf key value;
     (if Leaf.overflow leaf then
      let promoted, allocated = Leaf.split leaf in
      split_nodes (List.tl path) promoted (Leaf.self_address allocated));
-    Store.release tree.store;
+    Store.release t.store;
     tac stat_add
 
   module type MERGER = sig
@@ -302,29 +302,29 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     if Leaf.underflow leaf then merges path;
     Store.release t.store
 
-  let iter func tree =
+  let iter func t =
     let func key value = func (key |> Key.to_input) (value |> Value.to_input) in
     let rec aux address =
-      let page = Store.load tree.store address in
+      let page = Store.load t.store address in
       match Page.kind page |> Common.Kind.from_t with
       | Leaf ->
-          let leaf = Leaf.load tree.store address in
+          let leaf = Leaf.load t.store address in
           Leaf.iter leaf func;
-          Store.release_ro tree.store
+          Store.release_ro t.store
       | Node _depth ->
-          let node = Node.load tree.store address in
+          let node = Node.load t.store address in
           Node.iter node (fun _key address -> aux address)
     in
-    let root = Store.root tree.store in
+    let root = Store.root t.store in
     aux root
 
-  let iteri func tree =
+  let iteri func t =
     let counter = ref 0 in
     let f key value =
       incr counter;
       func !counter key value
     in
-    iter f tree
+    iter f t
 
   let replay_op t (op : Recorder.op) =
     match op with
@@ -421,13 +421,13 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Fmt.pf ppf "@[<hov 2>ROOT OF THE TREE:@;%a@]" Leaf.pp (Leaf.load t.store (Store.root t.store))
 
   module Private = struct
-    let dir tree = Store.Private.dir tree.store
+    let dir t = Store.Private.dir t.store
 
-    let root tree = Store.root tree.store
+    let root t = Store.root t.store
 
-    let store tree = tree.store
+    let store t = t.store
 
-    let cache_size tree = Store.Private.cache_size tree.store
+    let cache_size t = Store.Private.cache_size t.store
 
     let pp t ppf address =
       let page = Store.load t.store address in
@@ -441,17 +441,17 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           Fmt.set_style_renderer ppf `Ansi_tty;
           Fmt.pf ppf "%a@." (Node.pp |> Fmt.vbox) node
 
-    let go_to_leaf tree inkey =
+    let go_to_leaf t inkey =
       let key = Key.of_input inkey in
-      let rec aux tree key address acc =
-        let page = Store.load tree.store address in
+      let rec aux t key address acc =
+        let page = Store.load t.store address in
         match Page.kind page |> Common.Kind.from_t with
         | Leaf -> address :: acc
         | Node _depth ->
-            let node = Node.load tree.store address in
-            aux tree key (Node.find node key) (address :: acc)
+            let node = Node.load t.store address in
+            aux t key (Node.find node key) (address :: acc)
       in
-      aux tree key (Store.root tree.store) []
+      aux t key (Store.root t.store) []
 
     module Params = Params
     module Common = Common
