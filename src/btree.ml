@@ -328,8 +328,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   type total = { mutable add : int; mutable mem : int; mutable flush : int; mutable find : int }
 
-  let bar message total =
-    let w = if total = 0 then 1 else float_of_int total |> log10 |> floor |> int_of_float |> succ in
+  let bar message max_total total =
+    let w =
+      if max_total = 0 then 1 else float_of_int max_total |> log10 |> floor |> int_of_float |> succ
+    in
     let pp fmt i = Format.fprintf fmt "%*Ld/%*d %s" w i w total "operations" in
     let pp f = f ~width:(w + 1 + w + 1 + String.length "operations") pp in
     Progress_unix.counter ~mode:`UTF8 ~total:(Int64.of_int total) ~message ~pp ()
@@ -377,9 +379,13 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
     if not prog then Seq.iter (replay_op t) seq
     else
+      let maximum = max tot.add @@ max tot.find @@ max tot.mem tot.flush in
       Progress_unix.(
         with_reporters
-          (bar "add  " tot.add / bar "find " tot.find / bar "mem  " tot.mem / bar "flush" tot.flush))
+          (bar "add  " maximum tot.add
+          / bar "find " maximum tot.find
+          / bar "mem  " maximum tot.mem
+          / bar "flush" maximum tot.flush))
       @@ fun (((a, b), c), d) -> Seq.iter (replay_op ~prog:(a, b, c, d) t) seq
 
   let depth_of n =
