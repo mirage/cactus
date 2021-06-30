@@ -338,9 +338,12 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let noop _ = ()
 
-  let replay_op ?prog t (op : Recorder.op) =
+  let replay_op ~prog t (op : Recorder.op) =
     let bar_add, bar_find, bar_mem, bar_flush =
-      match prog with None -> (noop, noop, noop, noop) | Some prog -> prog
+      match prog with
+      | `None -> (noop, noop, noop, noop)
+      | `Single prog -> (prog, prog, prog, prog)
+      | `Multiple progs -> progs
     in
     match op with
     | Add (k, v) ->
@@ -372,21 +375,25 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     Seq.iter incr seq;
     tot
 
-  let replay path ?(prog = false) t =
+  let replay path ?(prog = `None) t =
     let seq = Recorder.replay path in
     let tot = count_ops seq in
     let seq = Recorder.replay path in
-
-    if not prog then Seq.iter (replay_op t) seq
-    else
-      let maximum = max tot.add @@ max tot.find @@ max tot.mem tot.flush in
-      Progress_unix.(
-        with_reporters
-          (bar "add  " maximum tot.add
-          / bar "find " maximum tot.find
-          / bar "mem  " maximum tot.mem
-          / bar "flush" maximum tot.flush))
-      @@ fun (((a, b), c), d) -> Seq.iter (replay_op ~prog:(a, b, c, d) t) seq
+    match prog with
+    | `None -> Seq.iter (replay_op ~prog:`None t) seq
+    | `Single ->
+        let sum = tot.add + tot.find + tot.mem + tot.flush in
+        Progress_unix.with_reporters (bar "operations" sum sum) @@ fun prog ->
+        Seq.iter (replay_op ~prog:(`Single prog) t) seq
+    | `Multiple ->
+        let maximum = max tot.add @@ max tot.find @@ max tot.mem tot.flush in
+        Progress_unix.(
+          with_reporters
+            (bar "add  " maximum tot.add
+            / bar "find " maximum tot.find
+            / bar "mem  " maximum tot.mem
+            / bar "flush" maximum tot.flush))
+        @@ fun (((a, b), c), d) -> Seq.iter (replay_op ~prog:(`Multiple (a, b, c, d)) t) seq
 
   let depth_of n =
     let rec aux h n = if n = 0 then h else aux (h + 1) (n / Params.fanout) in
