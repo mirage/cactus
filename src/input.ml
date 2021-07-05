@@ -42,13 +42,13 @@ end
 
 module Default = struct
   module Size : Size = struct
-    let fanout = 50
+    let fanout = 25
 
     let version = 0
 
-    let page_sz = 4700
+    let page_sz = 2700 (* page size, in bytes *)
 
-    let cache_sz = 2_000 (* 2 Gb of memory *)
+    let cache_sz = 1_000 (* allowed memory, in MB *)
 
     let debug = false
   end
