@@ -331,12 +331,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   let bar ~message ~max total =
     let open Progress in
     let w = if max = 0 then 1 else float_of_int max |> log10 |> floor |> int_of_float |> succ in
-    let w_pp = Printer.int ~width:w in
     Line.(
       list
         [
-          const message;
-          count_to ~pp:w_pp total;
+          const message |> rpad 6;
+          count_to total |> lpad (2*w + 1);
           percentage_of total |> brackets;
           elapsed ();
           bar ~style:`UTF8 ~color:(`magenta |> Color.ansi) total;
