@@ -33,8 +33,9 @@ let main trace _ =
       let root = "_bench/replay" in
       let tree = Btree.create root in
       Btree.replay ~prog:`Multiple trace tree;
-      Logs.info (fun reporter -> reporter "Max memory usage : %i@."
-        (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000))
+      Logs.info (fun reporter ->
+          reporter "Max memory usage : %i@."
+            (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000))
 
 open Cmdliner
 

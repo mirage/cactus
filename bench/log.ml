@@ -18,13 +18,12 @@ let app_reporter =
   in
   { Logs.report } |> Progress.instrument_logs_reporter
 
-
 let combine reporter =
   let report src level ~over k msgf =
     let v = app_reporter.Logs.report src level ~over:(fun () -> ()) k msgf in
     reporter.Logs.report src level ~over (fun () -> v) msgf
   in
-  { Logs.report } 
+  { Logs.report }
 
 let reporter ppf statsppf =
   let counter = Mtime_clock.counter () in

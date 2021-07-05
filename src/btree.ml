@@ -335,7 +335,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       list
         [
           const message |> rpad 6;
-          count_to total |> lpad (2*w + 1);
+          count_to total |> lpad ((2 * w) + 1);
           percentage_of total |> brackets;
           elapsed ();
           bar ~style:`UTF8 ~color:(`magenta |> Color.ansi) total;
@@ -352,7 +352,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | [ r1; r2; r3; r4 ] -> (r1, r2, r3, r4)
       | _ -> failwith "Unexpected number of reporters"
     in
-    let off_add, off_find, off_mem, off_flush = ref 0, ref 0, ref 0, ref 0 in
+    let off_add, off_find, off_mem, off_flush = (ref 0, ref 0, ref 0, ref 0) in
     let delta = 437 in
     Seq.iter
       (function
@@ -361,29 +361,36 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             | Add (k, v) ->
                 add t k v;
                 incr off_add;
-                if !off_add mod delta = 0 then (r_add !off_add ; off_add := 0)
+                if !off_add mod delta = 0 then (
+                  r_add !off_add;
+                  off_add := 0)
             | Mem (k, b) ->
                 let b' = mem t k in
                 assert (b' = b);
-                incr off_mem ;
-                if !off_mem mod delta = 0 then (r_mem !off_mem ; off_mem := 0)
+                incr off_mem;
+                if !off_mem mod delta = 0 then (
+                  r_mem !off_mem;
+                  off_mem := 0)
             | Flush ->
                 flush t;
-                incr off_flush ;
-                if !off_flush mod delta = 0 then (r_flush !off_flush ; off_flush := 0)
+                incr off_flush;
+                if !off_flush mod delta = 0 then (
+                  r_flush !off_flush;
+                  off_flush := 0)
             | Find (k, b) ->
                 (try
                    find t k |> ignore;
                    assert b
                  with Not_found -> assert (not b));
-                incr off_find ;
-                if !off_find mod delta = 0 then (r_find !off_find ; off_find := 0)
-))
-      ops ;
-      r_add !off_add ;
-      r_mem !off_mem ;
-      r_flush !off_flush;
-      r_find !off_find
+                incr off_find;
+                if !off_find mod delta = 0 then (
+                  r_find !off_find;
+                  off_find := 0)))
+      ops;
+    r_add !off_add;
+    r_mem !off_mem;
+    r_flush !off_flush;
+    r_find !off_find
 
   let count_ops seq =
     let tot = { add = 0; find = 0; mem = 0; flush = 0 } in
