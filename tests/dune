@@ -1,5 +1,5 @@
 (test
  (name main)
- (libraries btree alcotest repr logs logs.fmt progress.unix)
+ (libraries btree alcotest repr logs logs.fmt progress)
  (preprocess
   (pps ppx_repr)))

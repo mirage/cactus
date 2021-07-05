@@ -30,33 +30,42 @@ module Make (Config : CONFIG) = struct
   let of_array_iter arr = function func -> Array.iteri func arr
 
   let with_progress_bar ~message ~n ~unit =
+    let open Progress in
+    let w = if n = 0 then 1 else float_of_int n |> log10 |> floor |> int_of_float |> succ in
+    let w_pp = Printer.int ~width:w in
     let bar =
-      let w = if n = 0 then 1 else float_of_int n |> log10 |> floor |> int_of_float |> succ in
-      let pp fmt i = Format.fprintf fmt "%*Ld/%*d %s" w i w n unit in
-      let pp f = f ~width:(w + 1 + w + 1 + String.length unit) pp in
-      Progress_unix.counter ~mode:`ASCII ~width:79 ~total:(Int64.of_int n) ~message ~pp ()
+      Line.(
+        list
+          [
+            const message;
+            count_to ~pp:w_pp n;
+            const unit;
+            elapsed ();
+            bar ~style:`UTF8 ~color:(`magenta |> Color.ansi) n;
+            eta n |> brackets;
+          ])
     in
-    Progress_unix.with_reporters bar
+    Progress.with_reporter bar
 
   let write prog tree ?(with_flush = false) iterator =
     iterator (fun i (k, v) ->
-        if i > 0 && i mod 937 = 0 then prog 937L;
+        if i > 0 && i mod 937 = 0 then prog 937;
         Btree.add tree k v;
         if with_flush || i mod 10_000 = 0 then Btree.flush tree;
         if config.sleep && Random.int n <= 3 then (
           Logs.info (fun reporter -> reporter "Sleeping%s" (String.make 30 ' '));
           Unix.sleep 5));
-    prog @@ Int64.of_int @@ (n mod 937);
+    prog (n mod 937);
     Btree.flush tree
 
   let read prog tree iterator =
     iterator (fun _i (key, _) ->
-        prog 1L;
+        prog 1;
         Btree.find tree key |> ignore)
 
   let read_absent prog tree iterator =
     iterator (fun i (key, _) ->
-        if (i + 1) mod 987 = 0 then prog 987L;
+        if (i + 1) mod 987 = 0 then prog 987;
         try
           Btree.find tree key |> ignore;
           assert false
@@ -98,7 +107,7 @@ module Make (Config : CONFIG) = struct
 
   let iter tree () =
     with_progress_bar ~message:"iter_rw" ~n ~unit:"bindings" @@ fun prog ->
-    Btree.iteri (fun i _ _ -> if (i + 1) mod 987 = 0 then prog 987L) tree
+    Btree.iteri (fun i _ _ -> if (i + 1) mod 987 = 0 then prog 987) tree
 
   let find_random tree () =
     with_progress_bar ~message:"find_random" ~n ~unit:"lookups" @@ fun prog ->

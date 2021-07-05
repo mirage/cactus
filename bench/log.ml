@@ -11,10 +11,8 @@ let app_reporter =
     let print header tags k fmt =
       let open Btree.Private.Tag in
       let kind = match tags with None -> None | Some tags -> Logs.Tag.find kind_tag tags in
-      let formatter = match kind with Some Stats -> nop_fmt | _ -> Fmt.stdout in
-      Fmt.kpf k formatter
-        ("[%+04.0fms] %a @[" ^^ fmt ^^ "@]@.")
-        dt Logs_fmt.pp_header (level, header)
+      let ppf = match kind with Some Stats -> nop_fmt | _ -> Fmt.stdout in
+      Fmt.kpf k ppf ("[%+04.0fms] %a @[" ^^ fmt ^^ "@]@.") dt Logs_fmt.pp_header (level, header)
     in
     msgf @@ fun ?header ?tags fmt -> print header tags k fmt
   in

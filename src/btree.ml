@@ -328,40 +328,63 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   type total = { mutable add : int; mutable mem : int; mutable flush : int; mutable find : int }
 
-  let bar message max_total total =
-    let w =
-      if max_total = 0 then 1 else float_of_int max_total |> log10 |> floor |> int_of_float |> succ
-    in
-    let pp fmt i = Format.fprintf fmt "%*Ld/%*d %s" w i w total "operations" in
-    let pp f = f ~width:(w + 1 + w + 1 + String.length "operations") pp in
-    Progress_unix.counter ~mode:`UTF8 ~total:(Int64.of_int total) ~message ~pp ()
+  let bar ~message ~max total =
+    let open Progress in
+    let w = if max = 0 then 1 else float_of_int max |> log10 |> floor |> int_of_float |> succ in
+    let w_pp = Printer.int ~width:w in
+    Line.(
+      list
+        [
+          const message;
+          count_to ~pp:w_pp total;
+          percentage_of total |> brackets;
+          elapsed ();
+          bar ~style:`UTF8 ~color:(`magenta |> Color.ansi) total;
+          eta total |> brackets;
+        ])
 
   let noop _ = ()
 
-  let replay_op ~prog t (op : Recorder.op) =
-    let bar_add, bar_find, bar_mem, bar_flush =
-      match prog with
-      | `None -> (noop, noop, noop, noop)
-      | `Single prog -> (prog, prog, prog, prog)
-      | `Multiple progs -> progs
+  let replay_ops ops t reporters =
+    let r_add, r_find, r_mem, r_flush =
+      match reporters with
+      | [] -> (noop, noop, noop, noop)
+      | [ reporter ] -> (reporter, reporter, reporter, reporter)
+      | [ r1; r2; r3; r4 ] -> (r1, r2, r3, r4)
+      | _ -> failwith "Unexpected number of reporters"
     in
-    match op with
-    | Add (k, v) ->
-        add t k v;
-        bar_add 1L
-    | Mem (k, b) ->
-        let b' = mem t k in
-        assert (b' = b);
-        bar_mem 1L
-    | Flush ->
-        flush t;
-        bar_flush 1L
-    | Find (k, b) ->
-        (try
-           find t k |> ignore;
-           assert b
-         with Not_found -> assert (not b));
-        bar_find 1L
+    let off_add, off_find, off_mem, off_flush = ref 0, ref 0, ref 0, ref 0 in
+    let delta = 437 in
+    Seq.iter
+      (function
+        | (op : Recorder.op) -> (
+            match op with
+            | Add (k, v) ->
+                add t k v;
+                incr off_add;
+                if !off_add mod delta = 0 then (r_add !off_add ; off_add := 0)
+            | Mem (k, b) ->
+                let b' = mem t k in
+                assert (b' = b);
+                incr off_mem ;
+                if !off_mem mod delta = 0 then (r_mem !off_mem ; off_mem := 0)
+            | Flush ->
+                flush t;
+                incr off_flush ;
+                if !off_flush mod delta = 0 then (r_flush !off_flush ; off_flush := 0)
+            | Find (k, b) ->
+                (try
+                   find t k |> ignore;
+                   assert b
+                 with Not_found -> assert (not b));
+                incr off_find ;
+                if !off_find mod delta = 0 then (r_find !off_find ; off_find := 0)
+))
+      ops ;
+      r_add !off_add ;
+      r_mem !off_mem ;
+      r_flush !off_flush;
+      r_find !off_find
 
   let count_ops seq =
     let tot = { add = 0; find = 0; mem = 0; flush = 0 } in
@@ -379,21 +402,24 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let seq = Recorder.replay path in
     let tot = count_ops seq in
     let seq = Recorder.replay path in
-    match prog with
-    | `None -> Seq.iter (replay_op ~prog:`None t) seq
-    | `Single ->
-        let sum = tot.add + tot.find + tot.mem + tot.flush in
-        Progress_unix.with_reporters (bar "operations" sum sum) @@ fun prog ->
-        Seq.iter (replay_op ~prog:(`Single prog) t) seq
-    | `Multiple ->
-        let maximum = max tot.add @@ max tot.find @@ max tot.mem tot.flush in
-        Progress_unix.(
-          with_reporters
-            (bar "add  " maximum tot.add
-            / bar "find " maximum tot.find
-            / bar "mem  " maximum tot.mem
-            / bar "flush" maximum tot.flush))
-        @@ fun (((a, b), c), d) -> Seq.iter (replay_op ~prog:(`Multiple (a, b, c, d)) t) seq
+    let reporters =
+      match prog with
+      | `None -> Progress.Multi.lines []
+      | `Single ->
+          let sum = tot.add + tot.find + tot.mem + tot.flush in
+          Progress.Multi.lines [ bar ~message:"Operations" ~max:sum sum ]
+      | `Multiple ->
+          let max = max tot.add @@ max tot.find @@ max tot.mem tot.flush in
+          Progress.Multi.lines
+            [
+              bar ~message:"Add" ~max tot.add;
+              bar ~message:"Find " ~max tot.find;
+              bar ~message:"Mem  " ~max tot.mem;
+              bar ~message:"Flush" ~max tot.flush;
+            ]
+    in
+    let config = Progress.(Config.v ~min_interval:(Some (Duration.of_int_ms 200)) ()) in
+    Progress.with_reporters ~config reporters (replay_ops seq t)
 
   let depth_of n =
     let rec aux h n = if n = 0 then h else aux (h + 1) (n / Params.fanout) in

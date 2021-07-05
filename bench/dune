@@ -5,8 +5,10 @@
   btree
   cmdliner
   mtime
-  progress.unix
-  logs
+  progress
+  fmt.tty
+  fmt.cli
+  logs.cli
   logs.fmt
   oracle
   memtrace)
