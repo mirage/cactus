@@ -23,6 +23,8 @@
 (*                                                                           *)
 (*****************************************************************************)
 
+include Encoding_intf
+
 module Hash = struct
   module H = Digestif.Make_BLAKE2B (struct
     let digest_size = 32
@@ -60,7 +62,7 @@ module Hash = struct
   let hash = H.digesti_string
 end
 
-module Key : Index.Key.S with type t = Hash.t = struct
+module Key : KEY with type t = Hash.t = struct
   type t = Hash.t [@@deriving repr]
 
   let hash = Repr.(unstage (short_hash Hash.t)) ?seed:None

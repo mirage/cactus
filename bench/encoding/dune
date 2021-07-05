@@ -1,5 +1,5 @@
 (library
  (name encoding)
- (libraries fmt zarith repr ppx_repr irmin digestif optint index)
+ (libraries fmt zarith repr ppx_repr irmin digestif optint)
  (preprocess
   (pps ppx_repr)))

@@ -8,7 +8,6 @@
   progress.unix
   logs
   logs.fmt
-  index
   oracle
   memtrace)
  (preprocess
