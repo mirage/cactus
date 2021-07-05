@@ -314,8 +314,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load_using fd)
-          ~filter:(fun content ->
-            Page._kind content |> Common.Kind.to_depth |> fun _ -> `California)
+          ~filter:(fun _content -> `California)
           california_capacity lru_capacity
       in
       let header = Bytes.create Header.size |> Header.load in
