@@ -32,6 +32,8 @@ module type S = sig
       concatenation of each [key ^ value]. [init] is (much) faster than adding each bindings one by
       one. *)
 
+  val reconstruct : t -> unit
+
   val add : t -> key -> value -> unit
 
   val remove : t -> key -> unit

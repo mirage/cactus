@@ -378,6 +378,18 @@ functor
       let header = migrate_header kind (List.length kvs) in
       String.concat "" (header :: kvs)
 
+    let reconstruct t kind kvs =
+      List.iteri
+        (fun i (key, bound) ->
+          let off = Header.size + (i * entry_size) in
+          Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+          key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
+          bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound))
+        kvs;
+      Header.init t.header kind;
+      Header.s_nentry t.header (List.length kvs |> Header.Nentry.to_t);
+      Header.s_ndeadentry t.header (0 |> Header.Ndeadentry.to_t)
+
     let iter t func =
       for i = 0 to nentry t - 1 do
         if not (nth_dead t i) then func (nth_key t i) (nth_bound t i)

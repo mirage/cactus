@@ -42,11 +42,29 @@ let test_mem version n () =
     done
   done
 
+let test_reconstruct version n () =
+  let module MyBtree = (val get_tree version) in
+  let root = v_to_s version // "integrity_reconstruct" in
+  let tree = MyBtree.create root in
+  let keys = Array.init (n + 1) (fun _ -> generate_key ()) in
+  let () = keys |> Array.iteri @@ fun i key -> MyBtree.add tree key (i, i, i) in
+  MyBtree.reconstruct tree;
+  MyBtree.snapshot tree;
+  let () =
+    keys
+    |> Array.iteri @@ fun i key ->
+       Alcotest.(check (triple int int int))
+         (Format.sprintf "Checking key %s" key)
+         (i, i, i) (MyBtree.find tree key)
+  in
+  ()
+
 let suite version =
   ( Fmt.str "%s integrity" (v_to_s version),
     [
       ("Creation", `Quick, test_creation version);
       ("Addition", `Quick, test_addition version 1000);
-      ("Big addition", `Quick, test_addition version 10000);
-      ("Mem", `Quick, test_mem version 100);
+      ("Big addition", `Quick, test_addition version 10_000);
+      ("Mem", `Quick, test_mem version 10);
+      ("Reconstruct", `Slow, test_reconstruct version 10_000);
     ] )

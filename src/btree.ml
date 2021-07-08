@@ -501,6 +501,66 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     incr address;
     { store; instances = 1; recorder = None }
 
+  type reconstruct_elem = { address : Common.Address.t; min_key : Key.t }
+
+  let reconstruct t =
+    (* reconstruct the btree, assuming only the leaves not corrupted *)
+    let prepare_store () =
+      (* deallocate all non-leaf page and evaluates to the list of leaf addresses *)
+      let leaves = ref [] in
+      let () =
+        Store.iter t.store @@ fun address page ->
+        match Store.Page.kind page |> Common.Kind.from_t with
+        | Leaf -> leaves := address :: !leaves
+        | Node _ -> Store.deallocate t.store address
+      in
+      !leaves
+    in
+
+    let leaf_arr leaves =
+      let ret =
+        Array.of_list leaves
+        |> Array.map @@ fun address ->
+           {
+             address = Common.Address.to_t address;
+             min_key = Leaf.load t.store address |> Leaf.leftmost;
+           }
+      in
+      Array.sort (fun e1 e2 -> Key.compare e1.min_key e2.min_key) ret;
+      ret
+    in
+
+    let rec reconstruct depth arr =
+      let kind = Common.Kind.of_depth depth |> Common.Kind.from_t in
+      let width =
+        max 1 ((Array.length arr / Params.fanout) + min 1 (Array.length arr mod Params.fanout))
+        (* this is ceil (length / fanout) *)
+      in
+      let next_arr =
+        Array.init width @@ fun i ->
+        let nentry = min Params.fanout (Array.length arr - (Params.fanout * i)) in
+        let kvs =
+          List.init nentry (fun j ->
+              let elem = arr.((Params.fanout * i) + j) in
+              (elem.min_key, elem.address |> Common.Address.from_t))
+        in
+        let address = Store.allocate t.store in
+        let node = Node.load t.store address in
+        Node.reconstruct node kind kvs;
+        let elem =
+          {
+            address = Common.Address.to_t address;
+            min_key = (if i > 0 then Node.leftmost node else min_key);
+          }
+        in
+        elem
+      in
+      match width with
+      | 1 -> Store.reroot t.store (Common.Address.from_t next_arr.(0).address)
+      | _ -> reconstruct (depth + 1) next_arr
+    in
+    prepare_store () |> leaf_arr |> reconstruct 1
+
   let pp ppf t =
     Fmt.pf ppf "@[<hov 2>ROOT OF THE TREE:@;%a@]" Leaf.pp (Leaf.load t.store (Store.root t.store))
 

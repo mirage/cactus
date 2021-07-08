@@ -52,9 +52,11 @@ module type S = sig
   val length : t -> int
   (** [length t] is the number of bindings in [t] *)
 
-  val migrate : string list -> Field.kind -> string
+  val migrate : string list -> kind -> string
   (** [migrate kvs depth] constructs the serialised representation of the node associated to [kvs],
       the list of string representations for key,value bindings. *)
+
+  val reconstruct : t -> kind -> (key * address) list -> unit
 
   val pp : t Fmt.t
 end

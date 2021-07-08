@@ -17,6 +17,10 @@ module type S = sig
   val load : store -> address -> t
   (** [load s p] loads the table stored at address [p] in [s]. *)
 
+  val reconstruct : t -> Field.kind -> (key * value) list -> unit
+  (** [reconstruct t kvs] overwrite [t] with the list of bindings [kvs] which is assumed to be
+      sorted *)
+
   val migrate : string list -> Field.kind -> string
   (** [migrate kvs kind] is the representation of the key-value association list [kvs] in a vertex
       of type [kind] *)

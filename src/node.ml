@@ -82,6 +82,9 @@ functor
 
     let migrate kvs depth = NodeFmt.migrate kvs depth
 
+    let reconstruct t kind kvs =
+      NodeFmt.reconstruct t.node kind (List.map (fun (k, v) -> (k, encode_address v)) kvs)
+
     let length t = NodeFmt.length t.node
 
     let iter t func =
