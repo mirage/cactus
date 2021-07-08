@@ -336,8 +336,11 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     Unix.close t.fd
 
   let iter t func =
+    let max_dead = List.fold_left max 0 t.dead_pages in
+    let deads = Array.make (max_dead + 1) false in
+    List.iter (fun i -> deads.(i) <- true) t.dead_pages;
     for i = 1 to t.n_pages - 1 do
-      load t i |> func i
+      if i > max_dead || not deads.(i) then load t i |> func i
     done
 
   let pp_header ppf t =
