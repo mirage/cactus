@@ -72,7 +72,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
         match Common.Kind.from_t kind with
         | Leaf ->
             let leaf = Leaf.load t.store address in
-            let out_file = open_out (path // Fmt.str "pp_page_%i.ansi" address) in
+            let out_file = open_out (path // Fmt.str "leaf_%i.ansi" address) in
             let formatter = out_file |> Format.formatter_of_out_channel in
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." Leaf.pp leaf;
@@ -80,7 +80,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             Store.release t.store
         | Node _n ->
             let node = Node.load t.store address in
-            let out_file = open_out (path // Fmt.str "pp_page_%i.ansi" address) in
+            let out_file = open_out (path // Fmt.str "node_%i.ansi" address) in
             let formatter = out_file |> Format.formatter_of_out_channel in
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." (Node.pp |> Fmt.vbox) node;
@@ -89,7 +89,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             Node.iter node (fun _key addr -> snap_page (path // Fmt.str "%i" address) addr)
     in
     snap_page (Store.Private.dir t.store) (Store.root t.store);
-    let out_header = open_out (Store.Private.dir t.store // "pp_header.ansi") in
+    let out_header = open_out (Store.Private.dir t.store // "header.ansi") in
     let formatter = out_header |> Format.formatter_of_out_channel in
     Fmt.set_style_renderer formatter `Ansi_tty;
     Fmt.pf formatter "%a@." Store.pp_header t.store;
