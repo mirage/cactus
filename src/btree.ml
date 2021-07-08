@@ -77,7 +77,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
             Fmt.set_style_renderer formatter `Ansi_tty;
             Fmt.pf formatter "%a@." Leaf.pp leaf;
             close_out out_file;
-            Store.release_ro t.store
+            Store.release t.store
         | Node _n ->
             let node = Node.load t.store address in
             let out_file = open_out (path // Fmt.str "pp_page_%i.ansi" address) in
@@ -102,7 +102,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | Leaf ->
           let leaf = Leaf.load t.store address in
           let ret = Leaf.length leaf in
-          Store.release_ro t.store;
+          Store.release t.store;
           ret
       | Node _depth ->
           let node = Node.load t.store address in
@@ -161,7 +161,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
         record t (Find (inkey, false));
         raise Not_found
     in
-    Store.release_ro t.store;
+    Store.release t.store;
     tac stat_find;
     ret
 
@@ -172,7 +172,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let address = go_to_leaf (Store.root t.store) in
     let leaf = Leaf.load t.store address in
     let ret = Leaf.mem leaf key in
-    Store.release_ro t.store;
+    Store.release t.store;
     tac stat_mem;
     record t (Mem (inkey, ret));
     ret
@@ -310,7 +310,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | Leaf ->
           let leaf = Leaf.load t.store address in
           Leaf.iter leaf func;
-          Store.release_ro t.store
+          Store.release t.store
       | Node _depth ->
           let node = Node.load t.store address in
           Node.iter node (fun _key address -> aux address)

@@ -38,10 +38,6 @@ module type S = sig
   (** [release store] tells the store that no loaded pages is going to be written on. This allows
       the store to clean part of the cache, and must be called as frequently as possible. *)
 
-  val release_ro : t -> unit
-  (** [release_ro store] tells the store that no loaded pages is going to be written on, and that
-      the loaded one have not been written on. This cleans the store cache without flushing.*)
-
   val allocate : t -> address
 
   val deallocate : t -> address -> unit

@@ -185,8 +185,6 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
   let release t = CaliforniaCache.release t.cache
 
-  let release_ro t = CaliforniaCache.clear t.cache
-
   let flush t =
     (* Log.debug (fun reporter -> reporter "Running flush");*)
     tic stat_flush;
@@ -331,7 +329,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     ignore (allocate t);
     (* create page_0 for the header *)
     allocate t |> Common.Address.to_t |> Header.s_root t.header;
-    CaliforniaCache.full_clear t.cache
+    CaliforniaCache.clear t.cache
 
   let close t =
     flush t;

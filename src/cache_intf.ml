@@ -28,8 +28,6 @@ module type CALIFORNIA = sig
 
   val clear : t -> unit
 
-  val full_clear : t -> unit
-
   val flush : t -> unit
 end
 

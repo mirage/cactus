@@ -139,13 +139,6 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
     Hashtbl.remove t.volatile key
 
   let clear t =
-    Hashtbl.iter
-      (fun _ v ->
-        Queue.push v availables)
-      t.volatile;
-    Hashtbl.clear t.volatile
-
-  let full_clear t =
     Hashtbl.clear t.volatile;
     Hashtbl.clear t.california
 
