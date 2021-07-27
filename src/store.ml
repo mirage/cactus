@@ -358,7 +358,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let deads = Array.make (max_dead + 1) false in
     List.iter (fun i -> deads.(i) <- true) t.dead_pages;
     for i = 1 to t.n_pages - 1 do
-      if i > max_dead || not deads.(i) then load t i |> func i
+      if i > max_dead || not deads.(i) then load t i |> func i;
+      if i mod 10 = 0 then release t
     done
 
   let pp_header ppf t =

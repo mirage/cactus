@@ -40,12 +40,19 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
       filter;
     }
 
-  let flag = ref true
+  let lru_filled = ref false
 
   module Queue = struct
     include Queue
 
-    let push v q = if length q < 64 then push v q
+    let push =
+      let lost_count = ref 0 in
+      fun v q ->
+        if length q < 128 then push v q
+        else (
+          incr lost_count;
+          if !lost_count mod 1_000 = 0 then
+            Log.warn (fun reporter -> reporter "%i buffers lost" !lost_count))
   end
 
   let availables = Queue.create ()
@@ -71,16 +78,17 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
         | `California -> Hashtbl.add t.california key value
         | `Lru ->
             Lru.add key value t.lru;
-            if Lru.weight t.lru > Lru.capacity t.lru then (
-              if !flag then (
+            while Lru.weight t.lru > Lru.capacity t.lru do
+              if not !lru_filled then (
                 Log.warn (fun reporter -> reporter "LRU is filled");
-                flag := false);
+                lru_filled := true);
               match Lru.lru t.lru with
               | Some (key, value) ->
                   t.flush key value;
                   Queue.push (Lru.unsafe_lru t.lru) availables;
                   Lru.drop_lru t.lru
-              | None -> failwith "Empty LRU is over capacity")
+              | None -> failwith "Empty LRU should not be over capacity"
+            done
         | `Volatile ->
             Hashtbl.add t.volatile key value;
             if Hashtbl.length t.volatile > 64 then (

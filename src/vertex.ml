@@ -117,6 +117,7 @@ functor
       let header = Header.load ~marker buff in
       Header.init header kind;
       Store.reload store address;
+      (* Now that the page is marked as node or leaf, we reload it in the correct cache *)
       tac stat_create;
       { store; header; buff; marker }
 
@@ -155,6 +156,7 @@ functor
         Header.s_ndeadentry t.header (0 |> Header.Ndeadentry.to_t))
 
     let split t address =
+      (* TODO : we cannot reconstruct the tree if the system crashes between flushing the node and its split *)
       tic stat_split;
       shrink t;
       let promoted_rank = nentry t / 2 in

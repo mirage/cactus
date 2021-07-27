@@ -89,17 +89,14 @@ let test_recovery version n () =
       Fmt.pr "...restored@."
   in
   let () =
-    keys
-    |> Array.iteri @@ fun i key ->
-       Fmt.pr "%i@." i;
-       safe_add key (i, i, i) 30;
-       if i = 5667 then MyBtree.snapshot !tree;
+    keys |> Array.iteri @@ fun i key -> safe_add key (i, i, i) 30
+    (* if i = 5667 then MyBtree.snapshot !tree;
        if i = 5667 then
          Array.iteri
            (fun j key ->
              Fmt.pr "->%i %s@ " j key;
              MyBtree.find !tree key |> ignore)
-           (Array.sub keys 0 i)
+           (Array.sub keys 0 i) *)
   in
   let () =
     keys
