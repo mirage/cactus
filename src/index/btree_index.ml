@@ -41,12 +41,10 @@ module Make (Key : Key) (Value : Value) = struct
     ignore readonly;
     ignore throttle;
     ignore log_size;
-    match cache with
-    | None -> create root
-    | Some cache -> create ~record:"small-trace.btree.repr" ~cache root
+    match cache with None -> create root | Some cache -> create ~cache root
 
   let flush ?no_callback ?with_fsync t =
     ignore no_callback;
     ignore with_fsync;
-    flush t
+    ignore t
 end
