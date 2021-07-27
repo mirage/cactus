@@ -4,6 +4,10 @@ module Make (Config : CONFIG) = struct
   module Size : Input.SIZE = struct
     let ({ fanout; page_sz; cache_sz; key_sz; value_sz; debug; version; _ } : Input.config) =
       Config.config
+
+    module Debug = struct
+      let random_failure = false
+    end
   end
 
   module Input = Input.Make (Size)
