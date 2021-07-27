@@ -96,7 +96,7 @@ module MakeCommon (Params : Params.S) : COMMON = struct
   end)
 
   module Pointer = MakeInt (struct
-    let minimal_size = Params.page_sz |> Fmt.str "%x" |> String.length |> fun x -> (x + 1) / 2
+    let minimal_size = Params.page_sz - 1 |> Fmt.str "%x" |> String.length |> fun x -> (x + 1) / 2
 
     let size = [ 1; 2; 4; 8 ] |> List.filter (( <= ) minimal_size) |> List.hd
   end)

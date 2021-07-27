@@ -6,9 +6,7 @@ module type K = sig
 
   val size : int
 
-  val min : t (* min key *)
-
-  val max : t (* max key *)
+  val min : t (* minimal key *)
 
   val of_input : input_key -> t
 
@@ -20,14 +18,6 @@ module type K = sig
   (** The equality function for keys. *)
 
   val compare : t -> t -> int
-
-  val length : t -> int
-
-  val common_prefix : t -> t -> t
-
-  val sub : t -> off:int -> len:int -> t
-
-  val concat : t -> t -> t
 
   val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
 
@@ -85,38 +75,19 @@ functor
 
       let size = InKey.encoded_size
 
-      let min = Utils.min_key size
-
-      let max = Utils.max_key size
-
       let empty = ""
+
+      let min = Utils.min_key size
 
       let equal = String.equal
 
       let compare = String.compare
-
-      let length = String.length
-
-      let common_prefix k1 k2 =
-        String.of_seq
-          Seq.(
-            unfold
-              (fun (seq1, seq2) ->
-                match (seq1 (), seq2 ()) with
-                | Nil, _ | _, Nil -> None
-                | Cons (c1, seq1'), Cons (c2, seq2') when c1 = c2 -> Some (c1, (seq1', seq2'))
-                | _ -> None)
-              (String.to_seq k1, String.to_seq k2))
 
       let set ~marker buff ~off t =
         marker ();
         Bytes.blit_string t 0 buff off size
 
       let get buff ~off = Bytes.sub_string buff off size
-
-      let concat k1 k2 = k1 ^ k2
-
-      let sub t ~off ~len = String.sub t off len
 
       let of_input k =
         let ret = InKey.encode k in

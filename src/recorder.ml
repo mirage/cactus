@@ -33,7 +33,7 @@ module Make (Key : Input.Key) (Value : Input.Value) = struct
     flush t.out;
     close_out t.out
 
-  let replay path =
+  let operations path =
     let in_ = open_in path in
     let step () =
       try

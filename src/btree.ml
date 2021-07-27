@@ -19,9 +19,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   module Node = Node.Make (Params) (Store) (Key)
   module Recorder = Recorder.Make (InKey) (InValue)
 
-  open Stats.Func
   (** STAT WRAPPERS **)
 
+  open Stats.Func
   open Stats.Btree
 
   let () = if Params.debug then Log.warn (fun reporter -> reporter "Debug mode is set.")
@@ -40,11 +40,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     cache
 
   let record t op =
-    let _record op rc = Recorder.record rc op in
-    Option.iter (_record op) t.recorder
+    match t.recorder with Some recorder -> Recorder.record recorder (op ()) | None -> ()
 
   let flush t =
-    record t Flush;
+    record t (fun () -> Flush);
     Store.flush t.store
 
   let clear t =
@@ -155,10 +154,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let ret =
       try
         let ret = Leaf.find leaf key |> Value.to_input in
-        record t (Find (inkey, true));
+        record t (fun () -> Find (inkey, true));
         ret
       with Not_found ->
-        record t (Find (inkey, false));
+        record t (fun () -> Find (inkey, false));
         raise Not_found
     in
     Store.release t.store;
@@ -174,7 +173,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let ret = Leaf.mem leaf key in
     Store.release t.store;
     tac stat_mem;
-    record t (Mem (inkey, ret));
+    record t (fun () -> Mem (inkey, ret));
     ret
 
   let path_to_leaf t key =
@@ -204,7 +203,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let add t inkey invalue =
     tic stat_add;
-    record t (Add (inkey, invalue));
+    record t (fun () -> Add (inkey, invalue));
     Index_stats.incr_nb_replace ();
     let key = Key.of_input inkey in
     let value = Value.of_input invalue in
@@ -405,9 +404,8 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     tot
 
   let replay path ?(prog = `None) t =
-    let seq = Recorder.replay path in
-    let tot = count_ops seq in
-    let seq = Recorder.replay path in
+    let tot = Recorder.operations path |> count_ops in
+    let seq = Recorder.operations path in
     let reporters =
       match prog with
       | `None -> Progress.Multi.lines []

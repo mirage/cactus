@@ -13,6 +13,16 @@ module type CALIFORNIA = sig
     filter:(value -> [ `California | `Lru | `Volatile ]) ->
     int ->
     t
+  (* The constructor for caches.
+     @param flush The function to be called before any binding is discarded from the cache.
+     @param load The (possibly costly) function to call to fetch a new binding into the cache. An optional argument [~available] can be passed to recycle memory allocations from another, never used again, value.
+     @param filter A hierarchy function between bindings.
+       [`California] is for most frequent bindings which should never be discarded.
+       [`Lru] is for remaining frequent bindings that are too numerous to fit in memory.
+       [`Volatile] is for the least frequent bindings, discarded soon after loading.
+
+     [v ~flush ~load ~filter lru_cap] is a 3 level cache, with a bound of [lru_cap] bindings on the middle level.
+  *)
 
   val find : t -> key -> value
 

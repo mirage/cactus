@@ -13,8 +13,8 @@ module type S = sig
 
   val close : t -> unit
 
-  val replay : string -> op Seq.t
-  (* [replay path] is the sequence of operations recorded in file [path] *)
+  val operations : string -> op Seq.t
+  (* [operations path] is the sequence of operations recorded in file [path] *)
 end
 
 module type MAKER = functor (InKey : Input.Key) (InValue : Input.Value) ->
