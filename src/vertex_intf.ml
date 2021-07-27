@@ -85,7 +85,7 @@ module type S = sig
   (** [pp ppf t] outputs a human-readable representation of [t] to the formatter [ppf] *)
 end
 
-module type BOUND = sig
+module type VALUE = sig
   (* what is bound in the vertex *)
   type t
 
@@ -119,10 +119,10 @@ module type NODEMAKER = functor (Params : Params.S) (Store : Store.S) (Key : Dat
      and type store = Store.t
      and type address = Store.address
 
-module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K) (Bound : BOUND) ->
+module type MAKER = functor (Params : Params.S) (Store : Store.S) (Key : Data.K) (Value : VALUE) ->
   S
     with type key := Key.t
-     and type value := Bound.t
+     and type value := Value.t
      and type store = Store.t
      and type address = Store.address
 

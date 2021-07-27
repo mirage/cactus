@@ -7,7 +7,7 @@ functor
   (Params : Params.S)
   (Store : Store.S)
   (Key : Data.K)
-  (Bound : BOUND)
+  (Value : VALUE)
   ->
   struct
     type store = Store.t
@@ -25,7 +25,7 @@ functor
     type t = { store : store; header : Header.t; buff : bytes; marker : unit -> unit }
 
     let depth =
-      match Bound.kind with
+      match Value.kind with
       | `Leaf -> ( function _ -> 0)
       | `Node -> ( function t -> Header.g_kind t.header |> Common.Kind.to_depth)
 
@@ -33,17 +33,17 @@ functor
 
     let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
 
-    let flag_sz, key_sz, bound_sz = (Common.Flag.size, Params.key_sz, Bound.size)
+    let flag_sz, key_sz, value_sz = (Common.Flag.size, Params.key_sz, Value.size)
 
-    let entry_sizes = [ flag_sz; key_sz; bound_sz ]
+    let entry_sizes = [ flag_sz; key_sz; value_sz ]
 
     let entry_size = List.fold_left ( + ) 0 entry_sizes
 
-    type offsets = { flag : int; key : int; bound : int }
+    type offsets = { flag : int; key : int; value : int }
 
     let offsets =
       match Utils.sizes_to_offsets entry_sizes with
-      | [ flag; key; bound ] -> { flag; key; bound }
+      | [ flag; key; value ] -> { flag; key; value }
       | _ -> failwith "Incorrect offsets"
 
     let available_size = Params.page_sz - Header.size
@@ -59,7 +59,7 @@ functor
       Common.Flag.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag)
       |> Common.Flag.from_t
 
-    let nth_bound t n = Bound.get t.buff ~off:(Header.size + (n * entry_size) + offsets.bound)
+    let nth_value t n = Value.get t.buff ~off:(Header.size + (n * entry_size) + offsets.value)
 
     let density t =
       let n = nentry t - ndeadentry t |> Float.of_int in
@@ -83,8 +83,8 @@ functor
       open Fmt
 
       let pp_entry ppf ~off buff =
-        let color = match Bound.kind with `Leaf -> `Blue | `Node -> `Cyan in
-        pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>bound:@ %a@]"
+        let color = match Value.kind with `Leaf -> `Blue | `Node -> `Cyan in
+        pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>value:@ %a@]"
           (Common.Flag.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
           buff
           (Common.Flag.pp |> styled (`Bg `Red) |> styled `Reverse)
@@ -93,8 +93,8 @@ functor
           Key.pp
           (Key.get buff ~off:(off + offsets.key))
           (*-*)
-          (Bound.pp |> styled (`Bg color) |> styled `Reverse)
-          (Bound.get buff ~off:(off + offsets.bound))
+          (Value.pp |> styled (`Bg color) |> styled `Reverse)
+          (Value.get buff ~off:(off + offsets.value))
 
       let pp ppf t =
         let offs = List.init (nentry t) (fun i -> Header.size + (i * entry_size)) in
@@ -110,7 +110,7 @@ functor
       tic stat_create;
       (* initialises the header of a new vertex *)
       assert (
-        match (kind : Field.kind) with Node _ -> Bound.kind = `Node | Leaf -> Bound.kind = `Leaf);
+        match (kind : Field.kind) with Node _ -> Value.kind = `Node | Leaf -> Value.kind = `Leaf);
       let page = Store.load store address in
       let buff = Page.buff page in
       let marker = Page.marker page in
@@ -196,11 +196,11 @@ functor
 
     let find_n t key =
       let compare =
-        match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+        match Value.kind with `Leaf -> compare t key | `Node -> compare_interval t key
       in
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then
-        match Bound.kind with
+        match Value.kind with
         | `Leaf -> raise Not_found
         | `Node -> (
             (* find the nearest left alive neighbour *)
@@ -211,11 +211,11 @@ functor
       tic stat_find;
       let n = find_n t key in
       tac stat_find;
-      nth_bound t n
+      nth_value t n
 
     type neighbour = {
-      main : Key.t * Bound.t;
-      neighbour : (Key.t * Bound.t) option;
+      main : Key.t * Value.t;
+      neighbour : (Key.t * Value.t) option;
       order : [ `Lower | `Higher ];
     }
 
@@ -229,10 +229,10 @@ functor
         | Some _left, Some right -> Some right
         (* TODO : use a good heuristic for choosing neighbour*)
       in
-      let neighbour = match m with None -> None | Some m -> Some (nth_key t m, nth_bound t m) in
+      let neighbour = match m with None -> None | Some m -> Some (nth_key t m, nth_value t m) in
       let order = match m with Some m when m < n -> `Lower | _ -> `Higher in
       tac stat_find;
-      { main = (nth_key t n, nth_bound t n); neighbour; order }
+      { main = (nth_key t n, nth_value t n); neighbour; order }
 
     let mem t key =
       tic stat_mem;
@@ -240,7 +240,7 @@ functor
         if nentry t = 0 then false
         else
           let compare =
-            match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+            match Value.kind with `Leaf -> compare t key | `Node -> compare_interval t key
           in
           let n = Utils.binary_search ~safe:true ~compare 0 (nentry t) in
           Key.equal (nth_key t n) key && not (nth_dead t n)
@@ -265,7 +265,7 @@ functor
         length;
       tac stat_shift
 
-    let add t key bound =
+    let add t key value =
       tic stat_add;
       let position = find_position t key in
       let shadow = Key.equal (nth_key t position) key in
@@ -275,7 +275,7 @@ functor
       let off = Header.size + (position * entry_size) in
       Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
-      bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound);
+      value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value);
 
       if append || not shadow then Header.s_nentry t.header (nentry t + 1 |> Header.Nentry.to_t);
       if nentry t > 2 * Params.fanout then shrink t;
@@ -372,7 +372,7 @@ functor
 
     let migrate kvs kind =
       assert (
-        match (kind : Field.kind) with Leaf -> Bound.kind = `Leaf | Node _ -> Bound.kind = `Node);
+        match (kind : Field.kind) with Leaf -> Value.kind = `Leaf | Node _ -> Value.kind = `Node);
       let not_dead = Bytes.create Common.Flag.size in
       Common.Flag.to_t false |> Common.Flag.set ~marker:Utils.nop not_dead ~off:0;
       let not_dead = Bytes.to_string not_dead in
@@ -382,11 +382,11 @@ functor
 
     let reconstruct t kind kvs =
       List.iteri
-        (fun i (key, bound) ->
+        (fun i (key, value) ->
           let off = Header.size + (i * entry_size) in
           Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
           key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
-          bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound))
+          value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value))
         kvs;
       Header.init t.header kind;
       Header.s_nentry t.header (List.length kvs |> Header.Nentry.to_t);
@@ -394,11 +394,11 @@ functor
 
     let iter t func =
       for i = 0 to nentry t - 1 do
-        if not (nth_dead t i) then func (nth_key t i) (nth_bound t i)
+        if not (nth_dead t i) then func (nth_key t i) (nth_value t i)
       done
 
     let fold_left func acc t =
-      List.init (nentry t) (fun i -> (nth_key t i, nth_bound t i)) |> List.fold_left func acc
+      List.init (nentry t) (fun i -> (nth_key t i, nth_value t i)) |> List.fold_left func acc
   end
 
 module LeafMake (Params : Params.S) (Store : Store.S) (Key : Data.K) (Value : Data.V) = struct
