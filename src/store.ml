@@ -27,6 +27,18 @@ end
 module Make (Params : Params.S) (Common : Field.COMMON) = struct
   module Common = Common
 
+  module Syscalls = struct
+    include Syscalls
+
+    exception RandomFailure (* raised to test recoverability at a given point *)
+
+    let pwrite ~fd ~fd_offset ~buffer ~buffer_offset ~length =
+      if Params.Debug.random_failure && Random.int 500 = 1 then raise RandomFailure
+      else pwrite ~fd ~fd_offset ~buffer ~buffer_offset ~length
+  end
+
+  exception RandomFailure = Syscalls.RandomFailure
+
   module Header : HEADER with module Common := Common = struct
     type t = bytes
 

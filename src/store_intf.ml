@@ -1,4 +1,6 @@
 module type S = sig
+  exception RandomFailure
+
   type t
   (** the type for store handles *)
 

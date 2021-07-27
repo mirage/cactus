@@ -8,6 +8,10 @@ module type Size = sig
   val cache_sz : int
 
   val debug : bool
+
+  module Debug : sig
+    val random_failure : bool
+  end
 end
 
 module type Key = sig
@@ -51,6 +55,10 @@ module Default = struct
     let cache_sz = 1_000 (* allowed memory, in MB *)
 
     let debug = false
+
+    module Debug = struct
+      let random_failure = false
+    end
   end
 
   module Key : Key = struct

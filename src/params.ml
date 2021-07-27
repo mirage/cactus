@@ -25,10 +25,6 @@ module type S = sig
 
   val magic_sz : int
 
-  val checksum_mask_sz : int
-
-  val poor_man_sz : int
-
   val key_repr_sz : int
 
   val page_address_sz : int
@@ -39,7 +35,9 @@ module type S = sig
 
   val debug : bool
 
-  val use_poor_prefix : bool (* to benchmark how useful poor man's key prefixes are *)
+  module Debug : sig
+    val random_failure : bool
+  end
 end
 
 module Constant = struct
@@ -50,10 +48,6 @@ module Constant = struct
   let page_magic = "PAGE"
 
   let tree_height_sz = 2
-
-  let checksum_mask_sz = 1
-
-  let poor_man_sz = 1
 
   let page_address_sz = 4
 
@@ -86,6 +80,4 @@ functor
 
     let () =
       if 1 lsl (4 * offset_sz) < page_sz then failwith "Pages are too large to be fully addressable"
-
-    let use_poor_prefix = true
   end
