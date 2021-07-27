@@ -1,5 +1,5 @@
 module type FIELD = sig
-  type t [@@deriving repr]
+  type t
 
   type convert
 
@@ -54,7 +54,7 @@ module type COMMON = sig
 end
 
 module type Field = sig
-  type kind = _kind [@@deriving repr]
+  type kind = _kind
 
   module type INT = INT
 

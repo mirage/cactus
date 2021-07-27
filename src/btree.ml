@@ -484,7 +484,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
               (fun i n ->
                 let k_dump = create (leftmost && i = 0) (depth - 1) n in
                 let address_dump = get_address () in
-                (if leftmost && i = 0 then min_key |> Key.debug_dump else k_dump) ^ address_dump)
+                (if leftmost && i = 0 then min_key |> Key.dump else k_dump) ^ address_dump)
               ns
           in
           let content = Node.migrate kvs Common.Kind.(of_depth depth |> from_t) in

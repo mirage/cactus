@@ -1,5 +1,5 @@
 module type K = sig
-  type t [@@deriving repr]
+  type t
   (** The type for keys. *)
 
   type input_key
@@ -23,13 +23,13 @@ module type K = sig
 
   val get : bytes -> off:int -> t
 
-  val debug_dump : t -> string
+  val dump : t -> string
 
   val pp : Format.formatter -> t -> unit
 end
 
 module type V = sig
-  type t [@@deriving repr]
+  type t
   (** The type for values. *)
 
   type input_value
@@ -69,7 +69,7 @@ functor
     type input_value = InValue.t
 
     module Key = struct
-      type t = string [@@deriving repr]
+      type t = string
 
       type input_key = InKey.t
 
@@ -96,7 +96,7 @@ functor
 
       let to_input = InKey.decode
 
-      let debug_dump s = s
+      let dump s = s
 
       open Fmt
 
@@ -109,7 +109,7 @@ functor
     end
 
     module Value = struct
-      type t = string [@@deriving repr]
+      type t = string
 
       type input_value = InValue.t
 

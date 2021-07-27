@@ -3,7 +3,7 @@ include Field_intf
 type kind = _kind [@@deriving repr]
 
 module MakeInt (Size : SIZE) = struct
-  type t = int [@@deriving repr]
+  type t = int
 
   let size = Size.size
 

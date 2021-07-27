@@ -133,7 +133,7 @@ functor
       else comp
 
     let keys_sorted t =
-      let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.debug_dump) in
+      let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.dump) in
       Utils.is_sorted ret
 
     let shrink t =
