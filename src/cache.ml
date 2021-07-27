@@ -50,6 +50,8 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
 
   let availables = Queue.create ()
 
+  let length t = Hashtbl.length t.california + Hashtbl.length t.volatile + Lru.size t.lru
+
   let find t key =
     match
       (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)

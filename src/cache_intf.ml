@@ -37,6 +37,8 @@ module type CALIFORNIA = sig
   val clear : t -> unit
 
   val flush : t -> unit
+
+  val length : t -> int
 end
 
 module type MAKER = functor (K : Hashtbl.HashedType) (V : Lru.Weighted) ->
