@@ -267,7 +267,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     if tree_height > cache_height then
       CaliforniaCache.update_filter t.cache ~filter:(fun content ->
           let depth = Page._kind content |> Common.Kind.to_depth in
-          if tree_height - depth <= cache_height then `California
+          if depth = 0 then `Volatile
+          else if tree_height - depth <= cache_height then `California
           else if tree_height - depth = cache_height + 1 then `Lru
           else `Volatile)
 
@@ -310,11 +311,12 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load_using fd)
           ~filter:(fun content ->
             let depth = Page._kind content |> Common.Kind.to_depth in
-            if tree_height - depth <= cache_height then `California
+            if depth = 0 then `Volatile
+            else if tree_height - depth <= cache_height then `California
             else if tree_height - depth = cache_height + 1 then `Lru
             else `Volatile)
           (* only cache the top cache_height part of the tree *)
-          california_capacity lru_capacity
+          lru_capacity
       in
 
       let t = { n_pages; dead_pages = []; header; fd; dir = root; cache } in
@@ -324,8 +326,10 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       let fd = Unix.openfile file Unix.[ O_RDWR; O_CREAT; O_EXCL ] 0o600 in
       let cache =
         CaliforniaCache.v ~flush:(Page._flush fd) ~load:(Page.load_using fd)
-          ~filter:(fun _content -> `California)
-          california_capacity lru_capacity
+          ~filter:(fun content ->
+            let depth = Page._kind content |> Common.Kind.to_depth in
+            if depth = 0 then `Volatile else `California)
+          lru_capacity
       in
       let header = Bytes.create Header.size |> Header.load in
       let store = { n_pages = 0; dead_pages = []; header; fd; dir = root; cache } in

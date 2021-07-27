@@ -30,11 +30,11 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
     mutable filter : value -> [ `California | `Lru | `Volatile ];
   }
 
-  let v ~flush ~load ~filter california_cap lru_cap =
+  let v ~flush ~load ~filter lru_cap =
     {
       flush;
       load;
-      california = Hashtbl.create california_cap;
+      california = Hashtbl.create 4096;
       lru = Lru.create lru_cap;
       volatile = Hashtbl.create 16;
       filter;
