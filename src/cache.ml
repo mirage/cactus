@@ -11,6 +11,12 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
     exception EmptyLru
 
     let unsafe_lru t = match lru t with None -> raise EmptyLru | Some (_, v) -> v
+
+    let clear t =
+      let cap = capacity t in
+      resize 0 t;
+      trim t;
+      resize cap t
   end
 
   module Hashtbl = Hashtbl.Make (K)
@@ -140,7 +146,8 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
 
   let clear t =
     Hashtbl.clear t.volatile;
-    Hashtbl.clear t.california
+    Hashtbl.clear t.california;
+    Lru.clear t.lru
 
   let flush t =
     Hashtbl.iter t.flush t.california;
