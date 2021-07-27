@@ -336,6 +336,8 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       flush_header store;
       store
 
+  let clear_cache t = CaliforniaCache.clear t.cache
+
   let clear t =
     t.n_pages <- 0;
     ignore (allocate t);

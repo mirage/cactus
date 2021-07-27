@@ -40,6 +40,8 @@ module type S = sig
   (** [release store] tells the store that no loaded pages is going to be written on. This allows
       the store to clean part of the cache, and must be called as frequently as possible. *)
 
+  val clear_cache : t -> unit
+
   val allocate : t -> address
 
   val deallocate : t -> address -> unit
@@ -48,7 +50,7 @@ module type S = sig
 
   val fsync : t -> unit
 
-  val clear : t -> unit
+  val clear : t -> unit (* removes every binding *)
 
   val close : t -> unit
 
