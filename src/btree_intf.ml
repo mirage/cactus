@@ -32,7 +32,9 @@ module type S = sig
       concatenation of each [key ^ value]. [init] is (much) faster than adding each bindings one by
       one. *)
 
-  val reconstruct : t -> unit
+  val reconstruct : string -> t
+  (** [reconstruct root] is like [create root] but assumes that the b.tree file in directory [root]
+      is corrupted and repairs it first *)
 
   val add : t -> key -> value -> unit
 

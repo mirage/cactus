@@ -48,7 +48,8 @@ let test_reconstruct version n () =
   let tree = MyBtree.create root in
   let keys = Array.init (n + 1) (fun _ -> generate_key ()) in
   let () = keys |> Array.iteri @@ fun i key -> MyBtree.add tree key (i, i, i) in
-  MyBtree.reconstruct tree;
+  MyBtree.close tree;
+  let tree = MyBtree.reconstruct root in
   MyBtree.snapshot tree;
   let () =
     keys
@@ -56,6 +57,56 @@ let test_reconstruct version n () =
        Alcotest.(check (triple int int int))
          (Format.sprintf "Checking key %s" key)
          (i, i, i) (MyBtree.find tree key)
+  in
+  ()
+
+let test_recovery version n () =
+  Random.init 42;
+  let module MyBtree = (val get_tree ~random_failure:true version) in
+  let root = v_to_s version // "integrity_recovery" in
+  Logs.set_reporter Log.app_reporter;
+  Logs.set_level (Some Logs.Warning);
+  let tree = ref (MyBtree.create root) in
+  let keys = Array.init (n + 1) (fun _ -> generate_key ()) in
+
+  let rec safe_reconstruct safety_net =
+    if safety_net = 0 then failwith "Too many chained failures";
+    try tree := MyBtree.reconstruct root
+    with MyBtree.Private.Store.RandomFailure ->
+      Fmt.pr "Failure...@.";
+      safe_reconstruct (safety_net - 1);
+      Fmt.pr "...restored@."
+  in
+  let rec safe_add key value safety_net =
+    if safety_net = 0 then failwith "Too many chained failures";
+    try
+      MyBtree.add !tree key value;
+      MyBtree.find !tree key |> ignore
+    with MyBtree.Private.Store.RandomFailure ->
+      Fmt.pr "Failure...@.";
+      safe_reconstruct (safety_net - 1);
+      safe_add key value (safety_net - 1);
+      Fmt.pr "...restored@."
+  in
+  let () =
+    keys
+    |> Array.iteri @@ fun i key ->
+       Fmt.pr "%i@." i;
+       safe_add key (i, i, i) 30;
+       if i = 5667 then MyBtree.snapshot !tree;
+       if i = 5667 then
+         Array.iteri
+           (fun j key ->
+             Fmt.pr "->%i %s@ " j key;
+             MyBtree.find !tree key |> ignore)
+           (Array.sub keys 0 i)
+  in
+  let () =
+    keys
+    |> Array.iteri @@ fun i key ->
+       Alcotest.(check (triple int int int))
+         (Format.sprintf "Checking key %s" key)
+         (i, i, i) (MyBtree.find !tree key)
   in
   ()
 
@@ -67,4 +118,5 @@ let suite version =
       ("Big addition", `Quick, test_addition version 10_000);
       ("Mem", `Quick, test_mem version 10);
       ("Reconstruct", `Slow, test_reconstruct version 10_000);
+      ("Recover", `Slow, test_recovery version 100_000);
     ] )

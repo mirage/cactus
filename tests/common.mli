@@ -24,7 +24,7 @@ module Input : Btree.Input.Size
 
 module type TREE = Btree.S with type key = MyKey.t and type value = MyValue.t
 
-val get_tree : [ `V0 ] -> (module TREE)
+val get_tree : ?random_failure:bool -> [ `V0 ] -> (module TREE)
 
 val get_migrate_tree : [ `V0 ] -> (module TREE)
 

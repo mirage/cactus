@@ -503,9 +503,9 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   type reconstruct_elem = { address : Common.Address.t; min_key : Key.t }
 
-  let reconstruct t =
-    (* reconstruct the btree, assuming only the leaves not corrupted *)
-    let prepare_store () =
+  let reconstruct root =
+    (* reconstruct the btree, assuming that only the leaves are not corrupted *)
+    let prepare_store t =
       (* deallocate all non-leaf page and evaluates to the list of leaf addresses *)
       let leaves = ref [] in
       let () =
@@ -517,20 +517,24 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       !leaves
     in
 
-    let leaf_arr leaves =
+    let leaf_arr t leaves =
       let ret =
         Array.of_list leaves
         |> Array.map @@ fun address ->
            {
              address = Common.Address.to_t address;
-             min_key = Leaf.load t.store address |> Leaf.leftmost;
+             min_key =
+               (let key = Leaf.load t.store address |> Leaf.leftmost in
+                Store.release t.store;
+                key);
            }
       in
       Array.sort (fun e1 e2 -> Key.compare e1.min_key e2.min_key) ret;
       ret
     in
 
-    let rec reconstruct depth arr =
+    let rec reconstruct t depth arr =
+      (* reconstruct the level [depth] of the tree, given the sorted array [arr] of elements at the below level *)
       let kind = Common.Kind.of_depth depth |> Common.Kind.from_t in
       let width =
         max 1 ((Array.length arr / Params.fanout) + min 1 (Array.length arr mod Params.fanout))
@@ -542,24 +546,34 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
         let kvs =
           List.init nentry (fun j ->
               let elem = arr.((Params.fanout * i) + j) in
-              (elem.min_key, elem.address |> Common.Address.from_t))
+              let key = if i = 0 && j = 0 then min_key else elem.min_key in
+              (key, elem.address |> Common.Address.from_t))
         in
         let address = Store.allocate t.store in
         let node = Node.load t.store address in
         Node.reconstruct node kind kvs;
-        let elem =
-          {
-            address = Common.Address.to_t address;
-            min_key = (if i > 0 then Node.leftmost node else min_key);
-          }
-        in
-        elem
+        let ret = { address = Common.Address.to_t address; min_key = Node.leftmost node } in
+        Store.release t.store;
+        ret
       in
       match width with
       | 1 -> Store.reroot t.store (Common.Address.from_t next_arr.(0).address)
-      | _ -> reconstruct (depth + 1) next_arr
+      | _ -> reconstruct t (depth + 1) next_arr
     in
-    prepare_store () |> leaf_arr |> reconstruct 1
+
+    Log.info (fun reporter -> reporter "Btree version %i (15 Jun. 2021)" Size.version);
+    Log.debug (fun reporter -> reporter "Btree at root %s" root);
+    let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
+    let store = Store.init ~root in
+    let t = { store; instances = 1; recorder = None } in
+    if just_load then (
+      Log.debug (fun reporter -> reporter "Launching the recovery process");
+      prepare_store t |> leaf_arr t |> reconstruct t 1;
+      Log.debug (fun reporter -> length t |> reporter "Loading %i bindings"))
+    else (
+      Leaf.init t.store (Store.root t.store) |> ignore;
+      flush t);
+    t
 
   let pp ppf t =
     Fmt.pf ppf "@[<hov 2>ROOT OF THE TREE:@;%a@]" Leaf.pp (Leaf.load t.store (Store.root t.store))

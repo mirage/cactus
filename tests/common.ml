@@ -46,25 +46,44 @@ module Input = Btree.Input.Default.Size
 let generate_key () =
   MyKey.to_t (String.init MyKey.encoded_size (fun _i -> Char.chr (48 + Random.int 74)))
 
-module MyBtree0 = struct
-  include
-    Btree.Make (MyKey) (MyValue)
-      (struct
-        include Input
+module MyBtree0 =
+  Btree.Make (MyKey) (MyValue)
+    (struct
+      include Input
 
-        let version = 0
+      let version = 0
 
-        let page_sz = 4050
+      let page_sz = 4050
 
-        let fanout = 30
+      let fanout = 30
 
-        let debug = true
-      end)
-end
+      let debug = true
+    end)
+
+module MyBtreeFailures =
+  Btree.Make (MyKey) (MyValue)
+    (struct
+      include Input
+
+      let version = 0
+
+      let page_sz = 4050
+
+      let fanout = 30
+
+      let debug = true
+
+      module Debug = struct
+        let random_failure = true
+      end
+    end)
 
 module type TREE = Btree.S with type key = MyKey.t and type value = MyValue.t
 
-let get_tree version = match version with `V0 -> (module MyBtree0 : TREE)
+let get_tree ?(random_failure = false) version =
+  match (random_failure, version) with
+  | false, `V0 -> (module MyBtree0 : TREE)
+  | true, `V0 -> (module MyBtreeFailures)
 
 let get_migrate_tree version = match version with `V0 -> (module MyBtree0 : TREE)
 
@@ -97,11 +116,5 @@ let set_report root =
   let statppf = Format.formatter_of_out_channel statchan in
   Logs.set_level (Some Logs.Debug);
   Logs.set_reporter (reporter logppf statppf)
-
-(* let create root =
-  let tree = MyBtree.create ~root in
-  set_report root;
-  tree
- *)
 
 let v_to_s version = match version with `V0 -> "v0"
