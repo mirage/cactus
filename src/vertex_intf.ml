@@ -26,9 +26,6 @@ module type S = sig
   (** [migrate kvs kind] is the representation of the key-value association list [kvs] in a vertex
       of type [kind] *)
 
-  val clear : t -> (key -> bool) -> unit
-  (** [clear t predicate] clears every binding from [k] to [v] in [t] that satisfies [predicate k] *)
-
   val leftmost : t -> key
   (** [leftmost t] is the smallest key bound in [t] *)
 

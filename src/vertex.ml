@@ -125,8 +125,6 @@ functor
       tac stat_create;
       { store; header; buff; marker }
 
-    let clear _t _predicate = failwith "not finished"
-
     let compare t key n = Key.compare key (nth_key t n)
 
     (* Returns 0 if key belong to interval [n, n+1], <0 if its in a lower
