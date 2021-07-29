@@ -1,7 +1,5 @@
 include Field_intf
 
-type kind = _kind [@@deriving repr]
-
 module MakeInt (Size : SIZE) = struct
   type t = int
 
@@ -36,7 +34,7 @@ module MakeInt (Size : SIZE) = struct
 end
 
 module MakeBool (Size : SIZE) = struct
-  type t = bool [@@deriving repr]
+  type t = bool
 
   let size = Size.size
 
@@ -61,7 +59,7 @@ module MakeBool (Size : SIZE) = struct
 end
 
 module MakeString (Size : SIZE) = struct
-  type t = string [@@deriving repr]
+  type t = string
 
   let size = Size.size
 
@@ -102,7 +100,7 @@ module MakeCommon (Params : Params.S) : COMMON = struct
   end)
 
   module Flag = MakeBool (struct
-    let size = Params.flag
+    let size = 1
   end)
 
   module Kind = struct
@@ -119,10 +117,8 @@ module MakeCommon (Params : Params.S) : COMMON = struct
     end)
 
     let of_int i = if i = 0 then Leaf else Node i
-    (* this could change if we added more variants to [kind] *)
 
     let to_int t = match t with Leaf -> 0 | Node n -> n
-    (* this could change if we added more variants to [kind] *)
 
     let from_t = Fun.id
 

@@ -1,5 +1,6 @@
 module type H = sig
-  module Common : Field.COMMON (* module where live header fields common to all pages *)
+  module Common : Field.COMMON
+  (** Module for all common metadata. *)
 
   module Nentry : Field.INT
 

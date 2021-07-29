@@ -29,6 +29,7 @@ functor
       | `Leaf -> ( function _ -> 0)
       | `Node -> ( function t -> Header.g_kind t.header |> Common.Kind.to_depth)
 
+    (* [nentry t] includes the number of dead entries. *)
     let nentry t = Header.g_nentry t.header |> Header.Nentry.from_t
 
     let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
@@ -53,6 +54,7 @@ functor
         Fmt.pr "Page size must be at least %i@." (Header.size + (2 * Params.fanout * entry_size));
         assert false)
 
+    (* The nth_* functions below assume that [n] is not greater than [nentry t]. *)
     let nth_key t n = Key.get t.buff ~off:(Header.size + (n * entry_size) + offsets.key)
 
     let nth_dead t n =
@@ -108,7 +110,8 @@ functor
 
     let create store kind address =
       tic stat_create;
-      (* initialises the header of a new vertex *)
+      (* Initialises the header of a new vertex. We need the kind to recover the
+         depth in the node. *)
       assert (
         match (kind : Field.kind) with Node _ -> Value.kind = `Node | Leaf -> Value.kind = `Leaf);
       let page = Store.load store address in
@@ -116,8 +119,9 @@ functor
       let marker = Page.marker page in
       let header = Header.load ~marker buff in
       Header.init header kind;
+      (* Now that the page is marked as node or leaf, we reload it in the
+         correct cache. *)
       Store.reload store address;
-      (* Now that the page is marked as node or leaf, we reload it in the correct cache *)
       tac stat_create;
       { store; header; buff; marker }
 
@@ -125,6 +129,9 @@ functor
 
     let compare t key n = Key.compare key (nth_key t n)
 
+    (* Returns 0 if key belong to interval [n, n+1], <0 if its in a lower
+       interval and >0 if it's in a higher interval. Use this when looking for
+       an interval for the key. *)
     let compare_interval t key n =
       let comp = Key.compare key (nth_key t n) in
       if comp <= 0 then comp
@@ -136,6 +143,9 @@ functor
       let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.dump) in
       Utils.is_sorted ret
 
+    (* [shrink t] launches a garbage collection process that shrinks the size of
+       [t] to a minimum, by reclaiming the space of all dead entries in the
+       vertex. *)
     let shrink t =
       let n = nentry t in
       let rec aux src dst =
@@ -156,14 +166,17 @@ functor
         Header.s_ndeadentry t.header (0 |> Header.Ndeadentry.to_t))
 
     let split t address =
-      (* TODO : we cannot reconstruct the tree if the system crashes between flushing the node and its split *)
+      (* TODO : we cannot reconstruct the tree if the system crashes between
+         flushing the node and its split. *)
       tic stat_split;
       shrink t;
+
+      (* The promoted key [promoted] here acts as a pivot to separate the keys
+         remaining in the current vertex from those that are moved to a newly
+         allocated vertex. *)
       let promoted_rank = nentry t / 2 in
       let promoted = nth_key t promoted_rank in
 
-      (* the promoted key [promoted] here acts as a pivot to separate the keys remaining in the current vertex
-         from those that will be moving to a newly allocated vertex *)
       let mv_t = create t.store (Header.g_kind t.header |> Common.Kind.from_t) address in
 
       let mv_nentry = nentry t - promoted_rank in
@@ -213,12 +226,13 @@ functor
       tac stat_find;
       nth_value t n
 
-    type neighbour = {
+    type with_neighbour = {
       main : Key.t * Value.t;
       neighbour : (Key.t * Value.t) option;
       order : [ `Lower | `Higher ];
     }
 
+    (* Called after a remove to update the pointer of the parent node. *)
     let find_with_neighbour t key =
       tic stat_find;
       let n = find_n t key in
@@ -236,17 +250,18 @@ functor
 
     let mem t key =
       tic stat_mem;
-      let ret =
-        if nentry t = 0 then false
-        else
-          let compare =
-            match Value.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+      match Value.kind with
+      | `Node -> invalid_arg "Operation not supported for nodes"
+      | `Leaf ->
+          let ret =
+            if nentry t = 0 then false
+            else
+              let compare = compare t key in
+              let n = Utils.binary_search ~safe:true ~compare 0 (nentry t) in
+              Key.equal (nth_key t n) key && not (nth_dead t n)
           in
-          let n = Utils.binary_search ~safe:true ~compare 0 (nentry t) in
-          Key.equal (nth_key t n) key && not (nth_dead t n)
-      in
-      tac stat_mem;
-      ret
+          tac stat_mem;
+          ret
 
     let find_position t key =
       let compare = compare t key in
@@ -282,21 +297,26 @@ functor
       if Params.debug then assert (keys_sorted t);
       tac stat_add
 
+    (* This function is only used in the context of a deletion, after a merge,
+       to update the separator key. *)
     let replace t k1 k2 =
-      (* this function is only used in the context of a deletion, after a merge, to update the separator key *)
       let n = find_n t k1 in
       k2 |> Key.set ~marker:t.marker t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
       if
         Key.compare k1 k2 < 0 && n < nentry t - 1 && Key.compare k2 (nth_key t (n + 1)) > 0
-        (* sorted invariant is broken *)
+        (* Sorted invariant is broken. [shrink] is fixing the invariant if key
+           n+1 is dead. *)
       then shrink t;
       if
         Key.compare k1 k2 > 0 && n > 0 && Key.compare k2 (nth_key t (n - 1)) < 0
-        (* sorted invariant is broken *)
+        (* Sorted invariant is broken. [shrink] is fixing the invariant if key
+           n-1 is dead. *)
       then shrink t;
       if Params.debug then assert (keys_sorted t)
 
     let remove t key =
+      (* Because we want to remove exactly [k] we are using [compare] instead of
+         [compare_interval] here. *)
       let compare = compare t key in
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then raise Not_found;

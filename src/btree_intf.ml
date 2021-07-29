@@ -19,22 +19,26 @@ module type S = sig
   type cache
 
   val empty_cache : unit -> cache
+  (** [empty_cache ()] returns a fresh, empty cache. *)
 
   val create : ?cache:cache -> ?record:string -> string -> t
-  (** [create root] creates a btree storage in directory [root] *)
+  (** [create ?cache ?record root] creates a btree storage in directory [root]. If no [cache] is
+      specified each call to create opens a fresh instance. If [record] is specified then a trace is
+      recorded in file [record]. *)
 
   val replay : string -> ?prog:[ `None | `Single | `Multiple ] -> t -> unit
-  (** [replay path] replays the operations stored in file [path] *)
+  (** [replay ?prog path t] replays the operations stored in file [path]. *)
 
   val init : root:string -> int -> read:(int -> string) -> t
   (** [init ~root n ~read] performs a batch initialisation. [read] is an iterator-like function :
       [read n] reads the next [n] bindings and returns them in a single string chunk which is the
       concatenation of each [key ^ value]. [init] is (much) faster than adding each bindings one by
-      one. *)
+      one. It assumes that the bindings are sorted. *)
 
   val reconstruct : string -> t
   (** [reconstruct root] is like [create root] but assumes that the b.tree file in directory [root]
-      is corrupted and repairs it first *)
+      is corrupted (nodes are possibly corrupted but the leaves are not impacted) and repairs it
+      first. *)
 
   val add : t -> key -> value -> unit
 
@@ -60,6 +64,8 @@ module type S = sig
   val pp : t Fmt.t
 
   val snapshot : ?depth:int -> t -> unit
+  (** For every node/leaf in [t] which are at least [depth] away from the leaves,
+      [snapshot ~depth t], write in a file its rep as given by their corresponding pp function. *)
 
   module Private : sig
     module Params : Params.S

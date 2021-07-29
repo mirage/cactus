@@ -3,8 +3,12 @@ open Stats.Utils
 open Stats.Store
 
 let rec binary_search ?(safe = false) ~compare i j =
-  (* Finds [k] such that [compare k >= 0] and [compare (k+1) < 0], or [0] if no such positive [k] exists *)
-  (* if [safe] is false, fails if there is no [k] such that [compare k = 0] *)
+  (* Finds [k] such that [compare k >= 0] and [compare (k+1) < 0]. If no such
+     [k] it returns Not_found. If [safe] is false then it finds [k] such that
+     [compare k = 0] and raises Not_found otherwise. *)
+  (* The loop invariant is that [compare i >= 0] and [compare j < 0]. If [safe]
+     and if [i] is the last element then return it. If [safe] and if [i=0] and
+     [j=1] then it returns [i]. *)
   if j = i then raise Not_found;
   if j - i < 2 then if safe || compare i = 0 then i else raise Not_found
   else
@@ -44,52 +48,12 @@ let sizes_to_offsets sizes =
   aux [ 0 ] sizes
 
 let min_key length =
-  (* creates the smallest key of length [length] *)
+  (* Creates the smallest key of length [length]. *)
   String.make length '\000'
 
 let max_key length =
-  (* creates the largest key of length [length] *)
+  (* Creates the largest key of length [length]. *)
   String.make length '\255'
-
-let really_read fd buff off length =
-  (* repeat read until all bytes are read *)
-  let rec aux buffer_offset len =
-    let r = Unix.read fd buff buffer_offset len in
-    if r = 0 || r = len then buffer_offset + r - off (* end of file or everything is read *)
-    else (aux [@tailcall]) (buffer_offset + r) (len - r)
-  in
-  aux off length
-
-let really_write fd buff off length =
-  (* repeat write until all bytes are written *)
-  let rec aux buffer_offset len =
-    let r = Unix.write fd buff buffer_offset len in
-    if r = 0 || r = len then buffer_offset + r - off (* end of file or everything is written *)
-    else (aux [@tailcall]) (buffer_offset + r) (len - r)
-  in
-  aux off length
-
-let assert_read fd buff off length =
-  tic stat_io_r;
-  let read_sz = really_read fd buff off length in
-  if read_sz <> length then (
-    Log.err @@ fun reporter ->
-    reporter "Tried reading %i bytes but read only %i bytes" length read_sz;
-    assert false);
-  Index_stats.add_read length;
-  increment stat_io_r "nb_bytes" length;
-  tac stat_io_r
-
-let assert_write fd buff off length =
-  tic stat_io_w;
-  let write_sz = really_write fd buff off length in
-  if write_sz <> length then (
-    Log.err @@ fun reporter ->
-    reporter "Tried writing %i bytes wrote only %i bytes" length write_sz;
-    assert false);
-  Index_stats.add_write length;
-  increment stat_io_w "nb_bytes" length;
-  tac stat_io_w
 
 let assert_pread fd buffer off length =
   tic stat_io_r;

@@ -65,7 +65,7 @@ functor
     }
 
     let find_with_neighbour t key =
-      let ({ main; neighbour; order } : NodeFmt.neighbour) =
+      let ({ main; neighbour; order } : NodeFmt.with_neighbour) =
         NodeFmt.find_with_neighbour t.node key
       in
       let k1, v1 = main in
