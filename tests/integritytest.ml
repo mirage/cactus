@@ -60,7 +60,7 @@ let test_reconstruct version n () =
   in
   ()
 
-let test_recovery version n () =
+let _test_recovery version n () =
   Random.init 42;
   let module MyBtree = (val get_tree ~random_failure:true version) in
   let root = v_to_s version // "integrity_recovery" in
@@ -115,5 +115,5 @@ let suite version =
       ("Big addition", `Quick, test_addition version 10_000);
       ("Mem", `Quick, test_mem version 10);
       ("Reconstruct", `Slow, test_reconstruct version 10_000);
-      ("Recover", `Slow, test_recovery version 100_000);
+      (* ("Recover", `Slow, test_recovery version 100_000); *)
     ] )
