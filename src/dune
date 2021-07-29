@@ -5,7 +5,7 @@
   (names pread pwrite))
  (public_name btree)
  (libraries
-  mybentov
+  bentov
   repr
   unix
   hex

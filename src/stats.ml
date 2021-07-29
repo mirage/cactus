@@ -3,12 +3,12 @@ module Span = Mtime.Span
 module Func = struct
   type t = {
     mutable counter : int;
-    histo : Mybentov.histogram;
+    mutable histo : Bentov.histogram;
     mutable span : Mtime.span;
     mutable last_counter : int;
     mutable last_log : Mtime.t;
     mutable tic : [ `CanTac of Mtime.t | `CantTac ];
-    mutable logger : [ `NoLog | `Log of Mybentov.histogram -> unit ];
+    mutable logger : [ `NoLog | `Log of Bentov.histogram -> unit ];
     counters : (string, int) Hashtbl.t; (* optional additional named counters *)
   }
 
@@ -17,7 +17,7 @@ module Func = struct
     List.iter (fun name -> Hashtbl.add counters name 0) counter_names;
     {
       counter = 0;
-      histo = Mybentov.create 30;
+      histo = Bentov.create 30;
       last_counter = 0;
       last_log = Mtime_clock.now ();
       span = Mtime.Span.zero;
@@ -30,9 +30,11 @@ module Func = struct
     let current = Hashtbl.find t.counters name in
     Hashtbl.replace t.counters name (current + n)
 
+  let clear_histo t = t.histo <- Bentov.create 30
+
   let reset t =
     t.counter <- 0;
-    Mybentov.clear t.histo;
+    clear_histo t;
     t.last_counter <- 0;
     t.last_log <- Mtime_clock.now ();
     t.span <- Mtime.Span.zero;
@@ -58,7 +60,7 @@ module Func = struct
 
             let point = add_span |> Mtime.Span.to_us |> Float.log in
             (* use logarithm to spread values *)
-            Mybentov.add point t.histo;
+            t.histo <- Bentov.add point t.histo;
 
             t.counter <- t.counter + 1;
             if
@@ -66,7 +68,7 @@ module Func = struct
               && Mtime.span t.last_log after |> Mtime.Span.to_s > 0.1
             then (
               logger t.histo;
-              Mybentov.clear t.histo;
+              clear_histo t;
               t.last_counter <- t.counter;
               t.last_log <- after))
 
@@ -183,11 +185,11 @@ let pp_assoc ppf (name, fstat) = Fmt.pf ppf "@[<v 2>%s@;%a@]" name Func.pp fstat
 
 let pp_histo ppf histo =
   histo
-  |> Mybentov.bins
+  |> Bentov.bins
   |> Fmt.pf ppf "[%a]"
        (Fmt.list
           ~sep:(fun ppf () -> Fmt.pf ppf ",")
-          (fun ppf ({ center; count } : Mybentov.bin) -> Fmt.pf ppf "(%f,%i)" center count))
+          (fun ppf ({ center; count } : Bentov.bin) -> Fmt.pf ppf "(%f,%i)" center count))
 
 type module_stats = (string * Func.t) list
 
