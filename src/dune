@@ -5,7 +5,7 @@
   (names pread pwrite))
  (public_name btree)
  (libraries
-  mybentov
+  bentov
   repr
   unix
   hex
@@ -13,7 +13,7 @@
   mtime.clock.os
   logs
   optint
-  oracle
+  progress
   lru)
  (preprocess
   (pps ppx_repr)))

@@ -8,6 +8,6 @@ let make_suites version =
     Replaytest.suite version;
   ]
 
-let () = Alcotest.run "Btree storage" ([ Utilstest.suite ] @ make_suites `V0)
+let () = Alcotest.run "Btree storage" ([ Utilstest.suite; Oracletest.suite ] @ make_suites `V0)
 
 (* let () = Demo.snapshot () *)
