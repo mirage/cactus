@@ -36,6 +36,8 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
 
   let empty_cache () : cache =
     let cache = Hashtbl.create 10 in
+    (* Use a list of caches to allow [empty_cache ()] to return a fresh
+       cache. *)
     caches := cache :: !caches;
     cache
 
@@ -63,7 +65,6 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       List.iter (fun cache -> Hashtbl.remove cache (Store.Private.dir t.store)) !caches)
 
   let snapshot ?(depth = 0) t =
-    (* for every node/leaf in [t] which are at least [depth] away from the leaves, [snapshot ~depth t], write in a file its rep as given by their corresponding pp function *)
     let rec snap_page path address =
       let page = Store.load t.store address in
       let kind = Page.kind page in
@@ -111,7 +112,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     aux root
 
   let create ?cache ?record root =
-    Log.info (fun reporter -> reporter "Btree version %i (15 Jun. 2021)" Size.version);
+    Log.info (fun reporter -> reporter "Btree version %i" Size.version);
     Log.debug (fun reporter -> reporter "Btree at root %s" root);
     let t =
       match cache with
@@ -185,9 +186,10 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
           let node = Node.load t.store address in
           aux (address :: path) (Node.find node key)
     in
-
     aux [] (Store.root t.store)
 
+  (* The address of the neighbour of a vertex is its neighbour in the
+     parent mapping. *)
   let path_to_leaf_with_neighbour t key =
     let rec aux path_with_neighbour address =
       let page = Store.load t.store address in
@@ -213,15 +215,16 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     let rec split_nodes nodes promoted allocated_address =
       match nodes with
       | [] ->
-          (* this case happens only when no nodes are there in the first place *and* the leaf has overflowed
-             This means that the tree is a single leaf, and we have to create a new root on top of it *)
+          (* This case happens only when no nodes are there in the first place
+             *and* the leaf has overflowed. This means that the tree is a single
+             leaf, and we have to create a new root on top of it. *)
           let root = Node.create t.store Common.Kind.(of_depth 1 |> from_t) in
           Node.add root min_key leaf_address;
           Node.add root promoted allocated_address;
           Store.reroot t.store (Node.self_address root);
           Log.info (fun reporter -> reporter "Btree height increases to 1")
       | [ address ] ->
-          (* there are no nodes above : we are at the root *)
+          (* There are no nodes above : we are at the root. *)
           let root = Node.load t.store address in
           Node.add root promoted allocated_address;
           if Node.overflow root then (
@@ -269,10 +272,14 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       match path with
       | [] -> ()
       | (address, ({ main; neighbour; order } : Node.neighbour)) :: path -> (
+          (* [main] and [neighbour] are entries of the node at address
+             [address]. *)
           match neighbour with
           | None ->
               if not (path = []) then failwith "No neighbour";
-              (* we are at the root, which contains only a single key and acts as a mere redirection. We want to remove it and make its only child the new root*)
+              (* We are at the root, which contains only a single key and acts
+                 as a mere redirection. We want to remove it and make its only
+                 child the new root. *)
               Store.reroot t.store (snd main);
               Log.info (fun reporter ->
                   reporter "Btree height decreases to %i"
@@ -430,7 +437,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     aux (-1) n
 
   let init ~root n ~read =
-    Log.info (fun reporter -> reporter "Btree version %i (13 Apr. 2021)" Size.version);
+    Log.info (fun reporter -> reporter "Btree version %i" Size.version);
     let store = Store.init ~root in
     Log.info (fun reporter -> reporter "Initialising btree with %i bindings" n);
 
@@ -484,7 +491,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
               (fun i n ->
                 let k_dump = create (leftmost && i = 0) (depth - 1) n in
                 let address_dump = get_address () in
-                (if leftmost && i = 0 then min_key |> Key.debug_dump else k_dump) ^ address_dump)
+                (if leftmost && i = 0 then min_key |> Key.dump else k_dump) ^ address_dump)
               ns
           in
           let content = Node.migrate kvs Common.Kind.(of_depth depth |> from_t) in
@@ -502,9 +509,11 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
   type reconstruct_elem = { address : Common.Address.t; min_key : Key.t }
 
   let reconstruct root =
-    (* reconstruct the btree, assuming that only the leaves are not corrupted *)
+    (* Reconstruct the btree, assuming that only the leaves are not
+       corrupted. *)
     let prepare_store t =
-      (* deallocate all non-leaf page and evaluates to the list of leaf addresses *)
+      (* Deallocate all non-leaf page and evaluates to the list of leaf
+         addresses. *)
       let leaves = ref [] in
       let () =
         Store.iter t.store @@ fun address page ->
@@ -532,11 +541,12 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     in
 
     let rec reconstruct t depth arr =
-      (* reconstruct the level [depth] of the tree, given the sorted array [arr] of elements at the below level *)
+      (* Reconstruct the level [depth] of the tree, given the sorted array [arr]
+         of elements at the level below. *)
       let kind = Common.Kind.of_depth depth |> Common.Kind.from_t in
       let width =
         max 1 ((Array.length arr / Params.fanout) + min 1 (Array.length arr mod Params.fanout))
-        (* this is ceil (length / fanout) *)
+        (* This is ceil (length / fanout). *)
       in
       let next_arr =
         Array.init width @@ fun i ->
@@ -559,7 +569,7 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       | _ -> reconstruct t (depth + 1) next_arr
     in
 
-    Log.info (fun reporter -> reporter "Btree version %i (15 Jun. 2021)" Size.version);
+    Log.info (fun reporter -> reporter "Btree version %i" Size.version);
     Log.debug (fun reporter -> reporter "Btree at root %s" root);
     let just_load = Sys.file_exists (root ^ "/" ^ "b.tree") in
     let store = Store.init ~root in

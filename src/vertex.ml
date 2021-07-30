@@ -7,7 +7,7 @@ functor
   (Params : Params.S)
   (Store : Store.S)
   (Key : Data.K)
-  (Bound : BOUND)
+  (Value : VALUE)
   ->
   struct
     type store = Store.t
@@ -18,6 +18,10 @@ functor
     module Page = Store.Page
     module Header = Vertex_header.Make (Params) (Store) (Common)
 
+    module Isdead = Field.MakeBool (struct
+      let size = 1
+    end)
+
     (* STAT WRAPPERS *)
     open Stats.Func
     open Stats.Nodes
@@ -25,25 +29,26 @@ functor
     type t = { store : store; header : Header.t; buff : bytes; marker : unit -> unit }
 
     let depth =
-      match Bound.kind with
+      match Value.kind with
       | `Leaf -> ( function _ -> 0)
       | `Node -> ( function t -> Header.g_kind t.header |> Common.Kind.to_depth)
 
+    (* [nentry t] includes the number of dead entries. *)
     let nentry t = Header.g_nentry t.header |> Header.Nentry.from_t
 
     let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
 
-    let flag_sz, key_sz, bound_sz = (Common.Flag.size, Params.key_sz, Bound.size)
+    let flag_sz, key_sz, value_sz = (Isdead.size, Params.key_sz, Value.size)
 
-    let entry_sizes = [ flag_sz; key_sz; bound_sz ]
+    let entry_sizes = [ flag_sz; key_sz; value_sz ]
 
     let entry_size = List.fold_left ( + ) 0 entry_sizes
 
-    type offsets = { flag : int; key : int; bound : int }
+    type offsets = { flag : int; key : int; value : int }
 
     let offsets =
       match Utils.sizes_to_offsets entry_sizes with
-      | [ flag; key; bound ] -> { flag; key; bound }
+      | [ flag; key; value ] -> { flag; key; value }
       | _ -> failwith "Incorrect offsets"
 
     let available_size = Params.page_sz - Header.size
@@ -53,13 +58,13 @@ functor
         Fmt.pr "Page size must be at least %i@." (Header.size + (2 * Params.fanout * entry_size));
         assert false)
 
+    (* The nth_* functions below assume that [n] is not greater than [nentry t]. *)
     let nth_key t n = Key.get t.buff ~off:(Header.size + (n * entry_size) + offsets.key)
 
     let nth_dead t n =
-      Common.Flag.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag)
-      |> Common.Flag.from_t
+      Isdead.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag) |> Isdead.from_t
 
-    let nth_bound t n = Bound.get t.buff ~off:(Header.size + (n * entry_size) + offsets.bound)
+    let nth_value t n = Value.get t.buff ~off:(Header.size + (n * entry_size) + offsets.value)
 
     let density t =
       let n = nentry t - ndeadentry t |> Float.of_int in
@@ -83,18 +88,18 @@ functor
       open Fmt
 
       let pp_entry ppf ~off buff =
-        let color = match Bound.kind with `Leaf -> `Blue | `Node -> `Cyan in
-        pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>bound:@ %a@]"
-          (Common.Flag.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
+        let color = match Value.kind with `Leaf -> `Blue | `Node -> `Cyan in
+        pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>value:@ %a@]"
+          (Isdead.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
           buff
-          (Common.Flag.pp |> styled (`Bg `Red) |> styled `Reverse)
-          (Common.Flag.get buff ~off:(off + offsets.flag))
+          (Isdead.pp |> styled (`Bg `Red) |> styled `Reverse)
+          (Isdead.get buff ~off:(off + offsets.flag))
           (*-*)
           Key.pp
           (Key.get buff ~off:(off + offsets.key))
           (*-*)
-          (Bound.pp |> styled (`Bg color) |> styled `Reverse)
-          (Bound.get buff ~off:(off + offsets.bound))
+          (Value.pp |> styled (`Bg color) |> styled `Reverse)
+          (Value.get buff ~off:(off + offsets.value))
 
       let pp ppf t =
         let offs = List.init (nentry t) (fun i -> Header.size + (i * entry_size)) in
@@ -108,23 +113,26 @@ functor
 
     let create store kind address =
       tic stat_create;
-      (* initialises the header of a new vertex *)
+      (* Initialises the header of a new vertex. We need the kind to recover the
+         depth in the node. *)
       assert (
-        match (kind : Field.kind) with Node _ -> Bound.kind = `Node | Leaf -> Bound.kind = `Leaf);
+        match (kind : Field.kind) with Node _ -> Value.kind = `Node | Leaf -> Value.kind = `Leaf);
       let page = Store.load store address in
       let buff = Page.buff page in
       let marker = Page.marker page in
       let header = Header.load ~marker buff in
       Header.init header kind;
+      (* Now that the page is marked as node or leaf, we reload it in the
+         correct cache. *)
       Store.reload store address;
-      (* Now that the page is marked as node or leaf, we reload it in the correct cache *)
       tac stat_create;
       { store; header; buff; marker }
 
-    let clear _t _predicate = failwith "not finished"
-
     let compare t key n = Key.compare key (nth_key t n)
 
+    (* Returns 0 if key belong to interval [n, n+1[, <0 if its in a lower
+       interval and >0 if it's in a higher interval. Use this when looking for
+       an interval for the key. *)
     let compare_interval t key n =
       let comp = Key.compare key (nth_key t n) in
       if comp <= 0 then comp
@@ -133,9 +141,12 @@ functor
       else comp
 
     let keys_sorted t =
-      let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.debug_dump) in
+      let ret = List.init (nentry t) (fun i -> nth_key t i |> Key.dump) in
       Utils.is_sorted ret
 
+    (* [shrink t] launches a garbage collection process that shrinks the size of
+       [t] to a minimum, by reclaiming the space of all dead entries in the
+       vertex. *)
     let shrink t =
       let n = nentry t in
       let rec aux src dst =
@@ -156,14 +167,17 @@ functor
         Header.s_ndeadentry t.header (0 |> Header.Ndeadentry.to_t))
 
     let split t address =
-      (* TODO : we cannot reconstruct the tree if the system crashes between flushing the node and its split *)
+      (* TODO : we cannot reconstruct the tree if the system crashes between
+         flushing the node and its split. *)
       tic stat_split;
       shrink t;
+
+      (* The promoted key [promoted] here acts as a pivot to separate the keys
+         remaining in the current vertex from those that are moved to a newly
+         allocated vertex. *)
       let promoted_rank = nentry t / 2 in
       let promoted = nth_key t promoted_rank in
 
-      (* the promoted key [promoted] here acts as a pivot to separate the keys remaining in the current vertex
-         from those that will be moving to a newly allocated vertex *)
       let mv_t = create t.store (Header.g_kind t.header |> Common.Kind.from_t) address in
 
       let mv_nentry = nentry t - promoted_rank in
@@ -196,11 +210,11 @@ functor
 
     let find_n t key =
       let compare =
-        match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+        match Value.kind with `Leaf -> compare t key | `Node -> compare_interval t key
       in
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then
-        match Bound.kind with
+        match Value.kind with
         | `Leaf -> raise Not_found
         | `Node -> (
             (* find the nearest left alive neighbour *)
@@ -211,11 +225,11 @@ functor
       tic stat_find;
       let n = find_n t key in
       tac stat_find;
-      nth_bound t n
+      nth_value t n
 
-    type neighbour = {
-      main : Key.t * Bound.t;
-      neighbour : (Key.t * Bound.t) option;
+    type with_neighbour = {
+      main : Key.t * Value.t;
+      neighbour : (Key.t * Value.t) option;
       order : [ `Lower | `Higher ];
     }
 
@@ -229,24 +243,25 @@ functor
         | Some _left, Some right -> Some right
         (* TODO : use a good heuristic for choosing neighbour*)
       in
-      let neighbour = match m with None -> None | Some m -> Some (nth_key t m, nth_bound t m) in
+      let neighbour = match m with None -> None | Some m -> Some (nth_key t m, nth_value t m) in
       let order = match m with Some m when m < n -> `Lower | _ -> `Higher in
       tac stat_find;
-      { main = (nth_key t n, nth_bound t n); neighbour; order }
+      { main = (nth_key t n, nth_value t n); neighbour; order }
 
     let mem t key =
       tic stat_mem;
-      let ret =
-        if nentry t = 0 then false
-        else
-          let compare =
-            match Bound.kind with `Leaf -> compare t key | `Node -> compare_interval t key
+      match Value.kind with
+      | `Node -> invalid_arg "Operation not supported for nodes"
+      | `Leaf ->
+          let ret =
+            if nentry t = 0 then false
+            else
+              let compare = compare t key in
+              let n = Utils.binary_search ~safe:true ~compare 0 (nentry t) in
+              Key.equal (nth_key t n) key && not (nth_dead t n)
           in
-          let n = Utils.binary_search ~safe:true ~compare 0 (nentry t) in
-          Key.equal (nth_key t n) key && not (nth_dead t n)
-      in
-      tac stat_mem;
-      ret
+          tac stat_mem;
+          ret
 
     let find_position t key =
       let compare = compare t key in
@@ -265,7 +280,7 @@ functor
         length;
       tac stat_shift
 
-    let add t key bound =
+    let add t key value =
       tic stat_add;
       let position = find_position t key in
       let shadow = Key.equal (nth_key t position) key in
@@ -273,35 +288,40 @@ functor
       if not (shadow || append) then shift t position;
 
       let off = Header.size + (position * entry_size) in
-      Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Isdead.to_t false |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
-      bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound);
+      value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value);
 
       if append || not shadow then Header.s_nentry t.header (nentry t + 1 |> Header.Nentry.to_t);
       if nentry t > 2 * Params.fanout then shrink t;
       if Params.debug then assert (keys_sorted t);
       tac stat_add
 
+    (* This function is only used in the context of a deletion, after a merge,
+       to update the separator key. *)
     let replace t k1 k2 =
-      (* this function is only used in the context of a deletion, after a merge, to update the separator key *)
       let n = find_n t k1 in
       k2 |> Key.set ~marker:t.marker t.buff ~off:(Header.size + (n * entry_size) + offsets.key);
       if
         Key.compare k1 k2 < 0 && n < nentry t - 1 && Key.compare k2 (nth_key t (n + 1)) > 0
-        (* sorted invariant is broken *)
+        (* Sorted invariant is broken. [shrink] is fixing the invariant if key
+           n+1 is dead. *)
       then shrink t;
       if
         Key.compare k1 k2 > 0 && n > 0 && Key.compare k2 (nth_key t (n - 1)) < 0
-        (* sorted invariant is broken *)
+        (* Sorted invariant is broken. [shrink] is fixing the invariant if key
+           n-1 is dead. *)
       then shrink t;
       if Params.debug then assert (keys_sorted t)
 
     let remove t key =
+      (* Because we want to remove exactly [key] we are using [compare] instead of
+         [compare_interval] here. *)
       let compare = compare t key in
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then raise Not_found;
       let off = Header.size + (n * entry_size) in
-      Common.Flag.to_t true |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Isdead.to_t true |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
 
     let merge t1 t2 mode =
@@ -372,9 +392,9 @@ functor
 
     let migrate kvs kind =
       assert (
-        match (kind : Field.kind) with Leaf -> Bound.kind = `Leaf | Node _ -> Bound.kind = `Node);
-      let not_dead = Bytes.create Common.Flag.size in
-      Common.Flag.to_t false |> Common.Flag.set ~marker:Utils.nop not_dead ~off:0;
+        match (kind : Field.kind) with Leaf -> Value.kind = `Leaf | Node _ -> Value.kind = `Node);
+      let not_dead = Bytes.create Isdead.size in
+      Isdead.to_t false |> Isdead.set ~marker:Utils.nop not_dead ~off:0;
       let not_dead = Bytes.to_string not_dead in
       let kvs = List.map (( ^ ) not_dead) kvs in
       let header = migrate_header kind (List.length kvs) in
@@ -382,11 +402,11 @@ functor
 
     let reconstruct t kind kvs =
       List.iteri
-        (fun i (key, bound) ->
+        (fun i (key, value) ->
           let off = Header.size + (i * entry_size) in
-          Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+          Isdead.to_t false |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
           key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
-          bound |> Bound.set ~marker:t.marker t.buff ~off:(off + offsets.bound))
+          value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value))
         kvs;
       Header.init t.header kind;
       Header.s_nentry t.header (List.length kvs |> Header.Nentry.to_t);
@@ -394,11 +414,11 @@ functor
 
     let iter t func =
       for i = 0 to nentry t - 1 do
-        if not (nth_dead t i) then func (nth_key t i) (nth_bound t i)
+        if not (nth_dead t i) then func (nth_key t i) (nth_value t i)
       done
 
     let fold_left func acc t =
-      List.init (nentry t) (fun i -> (nth_key t i, nth_bound t i)) |> List.fold_left func acc
+      List.init (nentry t) (fun i -> (nth_key t i, nth_value t i)) |> List.fold_left func acc
   end
 
 module LeafMake (Params : Params.S) (Store : Store.S) (Key : Data.K) (Value : Data.V) = struct

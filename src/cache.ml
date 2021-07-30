@@ -1,16 +1,22 @@
 include Cache_intf
 
-module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
+module Make
+    (K : Hashtbl.HashedType) (V : sig
+      type t
+    end) =
+struct
   type key = K.t
 
   type value = V.t
 
   module Lru = struct
+    module V = struct
+      type t = V.t
+
+      let weight _ = 1
+    end
+
     include Lru.M.Make (K) (V)
-
-    exception EmptyLru
-
-    let unsafe_lru t = match lru t with None -> raise EmptyLru | Some (_, v) -> v
 
     let clear t =
       let cap = capacity t in
@@ -40,7 +46,13 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
       filter;
     }
 
-  let lru_filled = ref false
+  (* Emit a warning when the lru if filled. *)
+  let lru_filled =
+    let flag = ref true in
+    fun () ->
+      if !flag then (
+        Log.warn (fun reporter -> reporter "LRU is filled");
+        flag := false)
 
   module Queue = struct
     include Queue
@@ -55,39 +67,40 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
             Log.warn (fun reporter -> reporter "%i buffers lost" !lost_count))
   end
 
-  let availables = Queue.create ()
+  let reusable_buffer_pool = Queue.create ()
 
   let length t = Hashtbl.length t.california + Hashtbl.length t.volatile + Lru.size t.lru
+
+  (* Remove the least recently used value, flush it and reuse the buffer. *)
+  let remove_lru_and_reuse t =
+    match Lru.lru t.lru with
+    | Some (key, value) ->
+        t.flush key value;
+        Queue.push value reusable_buffer_pool;
+        Lru.drop_lru t.lru
+    | None -> failwith "Empty LRU"
 
   let find t key =
     match
       (Hashtbl.find_opt t.california key, Lru.find key t.lru, Hashtbl.find_opt t.volatile key)
     with
-    (* Lru.find is equivalent to Hashtbl.find_opt *)
     | Some value, None, None | None, None, Some value -> value
     | None, Some value, None ->
         Lru.promote key t.lru;
         value
     | None, None, None ->
         let value =
-          match Queue.is_empty availables with
+          match Queue.is_empty reusable_buffer_pool with
           | true -> t.load key
-          | false -> t.load ~available:(Queue.pop availables) key
+          | false -> t.load ~available:(Queue.pop reusable_buffer_pool) key
         in
         (match t.filter value with
         | `California -> Hashtbl.add t.california key value
         | `Lru ->
             Lru.add key value t.lru;
             while Lru.weight t.lru > Lru.capacity t.lru do
-              if not !lru_filled then (
-                Log.warn (fun reporter -> reporter "LRU is filled");
-                lru_filled := true);
-              match Lru.lru t.lru with
-              | Some (key, value) ->
-                  t.flush key value;
-                  Queue.push (Lru.unsafe_lru t.lru) availables;
-                  Lru.drop_lru t.lru
-              | None -> failwith "Empty LRU should not be over capacity"
+              lru_filled ();
+              remove_lru_and_reuse t
             done
         | `Volatile ->
             Hashtbl.add t.volatile key value;
@@ -139,12 +152,14 @@ module Make (K : Hashtbl.HashedType) (V : Lru.Weighted) = struct
         else (
           t.flush key value;
           None))
-      t.california
+      t.california;
+    Lru.iter (fun k v -> t.flush k v) t.lru;
+    Lru.clear t.lru
 
   let release t =
     Hashtbl.iter
       (fun k v ->
-        Queue.push v availables;
+        Queue.push v reusable_buffer_pool;
         t.flush k v)
       t.volatile;
     Hashtbl.clear t.volatile

@@ -1,10 +1,14 @@
 module type FIELD = sig
-  type t [@@deriving repr]
+  (** Modules of this type are an abstraction barrier between the in-memory and on-disk
+      representation of the metadata. *)
+
+  type t
 
   type convert
 
   val set : marker:(unit -> unit) -> bytes -> off:int -> t -> unit
-  (* marker is a function to mark the bytes as dirty *)
+  (** [set marker buff off t] sets the field value in [buff] at offset [off]. [marker] is a function
+      to mark a page as dirty. *)
 
   val get : bytes -> off:int -> t
 
@@ -19,7 +23,7 @@ module type FIELD = sig
   val pp_raw : Format.formatter -> bytes -> off:int -> unit
 end
 
-type _kind = Leaf | Node of int [@@deriving repr]
+type kind = Leaf | Node of int [@@deriving repr]
 
 module type INT = FIELD with type convert := int
 
@@ -28,11 +32,13 @@ module type BOOL = FIELD with type convert := bool
 module type STRING = FIELD with type convert := string
 
 module type KIND = sig
-  include FIELD with type convert := _kind
+  include FIELD with type convert := kind
 
-  val of_depth : int -> t (* kind of a node from its distance to the leaves *)
+  val of_depth : int -> t
+  (** [of_depth depth] returns the kind of a vertex based on its depth.*)
 
-  val to_depth : t -> int (* distance to the leaves of a node, from its kind *)
+  val to_depth : t -> int
+  (** [to_depth t] returns the depth a vertex from its kind. *)
 end
 
 module type SIZE = sig
@@ -43,18 +49,20 @@ module type COMMON = sig
   module Version : INT
 
   module Magic : STRING
+  (** Magic strings are used to mark the header of a btree or of a page. *)
 
   module Address : INT
+  (** The address of a page. *)
 
   module Pointer : INT
-
-  module Flag : BOOL
+  (** A pointer is an offset inside a page. *)
 
   module Kind : KIND
+  (** The kind of a vertex, either a Node or a Leaf. *)
 end
 
 module type Field = sig
-  type kind = _kind [@@deriving repr]
+  type nonrec kind = kind
 
   module type INT = INT
 
