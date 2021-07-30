@@ -2,7 +2,7 @@
  (names bench replay)
  (libraries
   encoding
-  btree
+  cactus
   cmdliner
   mtime
   progress

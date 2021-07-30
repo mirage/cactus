@@ -146,7 +146,7 @@ module Make (V : VALUE) (H : HYPER) = struct
             (i, peek) ipeeks
     in
     argmini
-    
+
   let with_progress_bar ~message ~n ~unit =
     let open Progress in
     let w = if n = 0 then 1 else float_of_int n |> log10 |> floor |> int_of_float |> succ in
@@ -171,11 +171,11 @@ module Make (V : VALUE) (H : HYPER) = struct
     let tot = buckets |> List.map Bucket.length |> List.fold_left ( + ) 0 in
     let bucket =
       Bucket.init ~tmp:out tot (fun i ->
-          if (i+1) mod (tot / 10_000) = 0 then prog (tot / 10_000);
+          if (i + 1) mod (tot / 10_000) = 0 then prog (tot / 10_000);
           let argmini = buckets |> argmin in
           argmini |> List.nth buckets |> Bucket.pop)
     in
-    prog (tot mod (tot / 10_000) );
+    prog (tot mod (tot / 10_000));
     bucket
 
   let rec sort ~prog ~oracle ~out n =

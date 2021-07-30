@@ -1,5 +1,5 @@
 (test
  (name main)
- (libraries btree oracle alcotest repr logs logs.fmt progress mtime)
+ (libraries cactus oracle alcotest repr logs logs.fmt progress mtime)
  (preprocess
   (pps ppx_repr)))
