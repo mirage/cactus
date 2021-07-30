@@ -18,19 +18,19 @@
 include Btree_index_intf
 
 module Make (Key : Key) (Value : Value) = struct
-  module Key : Btree.Input.Key with type t = Key.t = struct
+  module Key : Input.Key with type t = Key.t = struct
     include Key
 
     let decode s = decode s 0
   end
 
-  module Value : Btree.Input.Value with type t = Value.t = struct
+  module Value : Input.Value with type t = Value.t = struct
     include Value
 
     let decode s = decode s 0
   end
 
-  include Btree.Make (Key) (Value) (Btree.Input.Default.Size)
+  include Ext.Make_ext (Key) (Value) (Input.Default.Size)
 
   exception NotInBtree of string
 
