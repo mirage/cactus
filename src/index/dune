@@ -1,6 +1,6 @@
 (library
  (name btree_index)
- (public_name btree.index)
- (libraries btree mtime)
+ (public_name cactus.index)
+ (libraries cactus mtime)
  (preprocess
   (pps ppx_repr)))

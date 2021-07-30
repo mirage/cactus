@@ -3,7 +3,7 @@
  (foreign_stubs
   (language c)
   (names pread pwrite))
- (public_name btree)
+ (public_name cactus)
  (libraries
   bentov
   repr

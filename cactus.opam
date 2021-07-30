@@ -1,12 +1,12 @@
 opam-version: "2.0"
-synopsis: "Proof of concept for disk B-Trees"
+synopsis: "A B-Tree based index implementation."
 description:
-  "This package exposes B-Tree functionalities to persist on and load from disk."
+  "This package implements a disk-resident, B-Tree based key value data structure."
 maintainer: "gabriel.belouze@tarides.com"
 authors: "Gabriel Belouze"
 license: "MIT"
-homepage: "https://github.com/gbelouze/tarides-gabriel-internship/"
-bug-reports: "https://github.com/gbelouze/tarides-gabriel-internship/issues/"
+homepage: "https://github.com/mirage/cactus/"
+bug-reports: "https://github.com/mirage/cactus/issues/"
 depends: [
   "dune" {>= "2.0"}
   "ocaml" {>= "4.08.0"}
@@ -35,4 +35,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/gbelouze/tarides-gabriel-internship.git"
+dev-repo: "git+https://github.com/mirage/cactus.git"

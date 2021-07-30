@@ -1,5 +1,3 @@
 _build
 _bench
-.DS_Store
-setup.sh
 .gitignore
