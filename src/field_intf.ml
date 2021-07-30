@@ -57,9 +57,6 @@ module type COMMON = sig
   module Pointer : INT
   (** A pointer is an offset inside a page. *)
 
-  module Flag : BOOL
-  (** A flag is set to true for phantom vertexes. *)
-
   module Kind : KIND
   (** The kind of a vertex, either a Node or a Leaf. *)
 end

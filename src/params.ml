@@ -1,35 +1,35 @@
 module type S = sig
   val fanout : int
-  (** The fanout characterizes the number of bindings in a vertex, which is between fanout and 2 *
-      fanout for all vertexes except for the root of the btree. *)
+  (** The fanout characterizes the number of bindings in a vertex, which is bounded between fanout
+      and 2 * fanout for all vertexes except for the root of the btree. *)
 
   val version : int
   (** The version of the btree. *)
 
   val tree_height_sz : int
-  (** The height of the tree. *)
+  (** The number of bytes for representing the tree height. *)
 
   val page_sz : int
-  (** The page size (in B). It should be the max between (max_key * (key_sz + page_address_sz)) and
-      (max_key * (key_sz + value_sz)). *)
+  (** The page size (in B). It should be (approx) the max between (max_key * (key_sz +
+      page_address_sz)) and (max_key * (key_sz + value_sz)). *)
 
   val cache_sz : int
   (** The cache size (in MB). *)
 
   val key_sz : int
-  (** Key sizes.*)
+  (** The number of bytes for representing keys. *)
 
   val value_sz : int
-  (** Value sizes.*)
+  (** The number of bytes for representing values. *)
 
   val max_key : int
   (** The maximum number of keys per page (usually 2 * fanout + 1). *)
 
   val max_key_sz : int
-  (** The size of the max_key. *)
+  (** The number of bytes for representing the max_key. *)
 
   val version_sz : int
-  (** Version size (in B). *)
+  (** The number of bytes for representing versions. *)
 
   val btree_magic : string
   (** Magic string written on disk to mark the header of a btree file. *)
@@ -41,14 +41,14 @@ module type S = sig
   (** Magic size (in B). *)
 
   val key_repr_sz : int
-  (** The size of key_sz (in B). Useful for variable length keys or for the (not yet implemented)
-      suffix truncation of keys. *)
+  (** The number of bytes for representing the key_sz. Useful for variable length keys or for the
+      (not yet implemented) suffix truncation of keys. *)
 
   val page_address_sz : int
-  (** The size of a page address (in B). *)
+  (** The number of bytes for representing page addresses. *)
 
-  val offset_sz : int
-  (** Offset size (in B). *)
+  val pointer_sz : int
+  (** The number of bytes for representing pointers. *)
 
   val debug : bool
   (** Specifies if the run is in debug mode which checks sortedness after key insertion and
@@ -70,7 +70,7 @@ module Constant = struct
 
   let page_address_sz = 4
 
-  let offset_sz = 4
+  let pointer_sz = 4
 
   let flag = 1
 end
@@ -98,5 +98,6 @@ functor
     let key_repr_sz = key_sz |> Utils.b256size
 
     let () =
-      if 1 lsl (4 * offset_sz) < page_sz then failwith "Pages are too large to be fully addressable"
+      if 1 lsl (4 * pointer_sz) < page_sz then
+        failwith "Pages are too large to be fully addressable"
   end

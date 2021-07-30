@@ -87,11 +87,13 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     cache : CaliforniaCache.t;
   }
 
-  type page = { address : address; store : fd; content : content }
+  type page = { address : address; fd : fd; content : content }
 
   module Page = struct
     type pointer = int
     (* A pointer is an offset inside a page. *)
+
+    type store = t
 
     type t = page
 
@@ -129,7 +131,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
         tac stat_io_w;
         increment stat_io_w "nb_bytes" write_size)
 
-    let flush t = _flush t.store t.address t.content
+    let flush t = _flush t.fd t.address t.content
 
     let buff t = t.content.buff
 
@@ -137,7 +139,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
     let _buff0 = Bytes.make max_size '\000'
 
-    let init store address =
+    let init (store : store) address =
       tic stat_io_w;
       let write_size =
         Syscalls.pwrite ~fd:store.fd
@@ -165,7 +167,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     let kind t = _kind t.content
   end
 
-  let fsync t =
+  let fsync (t : t) =
     tic stat_fsync;
     Unix.fsync t.fd;
     tac stat_fsync
@@ -178,11 +180,11 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     CaliforniaCache.flush t.cache;
     tac stat_flush
 
-  let load t address = { address; store = t.fd; content = CaliforniaCache.find t.cache address }
+  let load (t : t) address = { address; fd = t.fd; content = CaliforniaCache.find t.cache address }
 
   let reload t address = CaliforniaCache.reload t.cache address
 
-  let allocate t =
+  let allocate (t : t) =
     match t.dead_pages with
     | [] ->
         let n = t.n_pages in
@@ -199,7 +201,7 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
     t.dead_pages <- address :: t.dead_pages;
     CaliforniaCache.deallocate t.cache address
 
-  let flush_header t = Utils.assert_pwrite t.fd (Header.dump t.header) 0 Header.size
+  let flush_header (t : t) = Utils.assert_pwrite t.fd (Header.dump t.header) 0 Header.size
 
   let mkdir dirname =
     let rec aux dir k =
@@ -351,12 +353,12 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
 
     let cache_size t = (t.cache |> Obj.repr |> Obj.reachable_words) * Sys.word_size / 8
 
-    let write t s =
+    let write (t : t) s =
       let l = String.length s in
       let write_size = Unix.write_substring t.fd s 0 l in
       assert (write_size = l)
 
-    let init_migration t = Unix.(lseek t.fd (root t * Params.page_sz) SEEK_SET) |> ignore
+    let init_migration (t : t) = Unix.(lseek t.fd (root t * Params.page_sz) SEEK_SET) |> ignore
 
     let end_migration t n root =
       t.n_pages <- n;

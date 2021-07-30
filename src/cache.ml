@@ -18,10 +18,6 @@ struct
 
     include Lru.M.Make (K) (V)
 
-    exception EmptyLru
-
-    let unsafe_lru t = match lru t with None -> raise EmptyLru | Some (_, v) -> v
-
     let clear t =
       let cap = capacity t in
       resize 0 t;
@@ -76,10 +72,13 @@ struct
   let length t = Hashtbl.length t.california + Hashtbl.length t.volatile + Lru.size t.lru
 
   (* Remove the least recently used value, flush it and reuse the buffer. *)
-  let remove_lru_and_reuse t key value =
-    t.flush key value;
-    Queue.push (Lru.unsafe_lru t.lru) reusable_buffer_pool;
-    Lru.drop_lru t.lru
+  let remove_lru_and_reuse t =
+    match Lru.lru t.lru with
+    | Some (key, value) ->
+        t.flush key value;
+        Queue.push value reusable_buffer_pool;
+        Lru.drop_lru t.lru
+    | None -> failwith "Empty LRU"
 
   let find t key =
     match
@@ -101,9 +100,7 @@ struct
             Lru.add key value t.lru;
             while Lru.weight t.lru > Lru.capacity t.lru do
               lru_filled ();
-              match Lru.lru t.lru with
-              | Some (key, value) -> remove_lru_and_reuse t key value
-              | None -> failwith "Empty LRU should not be over capacity"
+              remove_lru_and_reuse t
             done
         | `Volatile ->
             Hashtbl.add t.volatile key value;
@@ -156,7 +153,8 @@ struct
           t.flush key value;
           None))
       t.california;
-    Lru.iter (remove_lru_and_reuse t) t.lru
+    Lru.iter (fun k v -> t.flush k v) t.lru;
+    Lru.clear t.lru
 
   let release t =
     Hashtbl.iter

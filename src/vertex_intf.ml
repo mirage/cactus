@@ -1,6 +1,6 @@
 module type S = sig
   type t
-  (** The type for vertexes. For leafs its a map (key * value). For nodes it maps a [key] interval
+  (** The type for vertices. For leafs its a map (key * value). For nodes it maps a [key] interval
       to an [address]. *)
 
   type key
@@ -12,15 +12,15 @@ module type S = sig
   type store
 
   val create : store -> Field.kind -> address -> t
-  (** [create s k p] creates a new empty table (of kind either Leaf or Node), stored at address [p]
-      in [s], with initial size [Params.fanout]. *)
+  (** [create s k p] creates a new empty vertex (of kind either Leaf or Node), stored at address [p]
+      in [s]. *)
 
   val load : store -> address -> t
   (** [load s p] loads the table stored at address [p] in [s]. *)
 
   val reconstruct : t -> Field.kind -> (key * value) list -> unit
   (** [reconstruct t kind kvs] overwrite [t] with the list of bindings [kvs] which is assumed to be
-      sorted *)
+      sorted. *)
 
   val migrate : string list -> Field.kind -> string
   (** [migrate kvs kind] is the representation of the key-value association list [kvs] in a vertex

@@ -18,6 +18,10 @@ functor
     module Page = Store.Page
     module Header = Vertex_header.Make (Params) (Store) (Common)
 
+    module Phantom = Field.MakeBool (struct
+      let size = 1
+    end)
+
     (* STAT WRAPPERS *)
     open Stats.Func
     open Stats.Nodes
@@ -34,7 +38,7 @@ functor
 
     let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
 
-    let flag_sz, key_sz, value_sz = (Common.Flag.size, Params.key_sz, Value.size)
+    let flag_sz, key_sz, value_sz = (Phantom.size, Params.key_sz, Value.size)
 
     let entry_sizes = [ flag_sz; key_sz; value_sz ]
 
@@ -58,8 +62,7 @@ functor
     let nth_key t n = Key.get t.buff ~off:(Header.size + (n * entry_size) + offsets.key)
 
     let nth_dead t n =
-      Common.Flag.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag)
-      |> Common.Flag.from_t
+      Phantom.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag) |> Phantom.from_t
 
     let nth_value t n = Value.get t.buff ~off:(Header.size + (n * entry_size) + offsets.value)
 
@@ -87,10 +90,10 @@ functor
       let pp_entry ppf ~off buff =
         let color = match Value.kind with `Leaf -> `Blue | `Node -> `Cyan in
         pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>value:@ %a@]"
-          (Common.Flag.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
+          (Phantom.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
           buff
-          (Common.Flag.pp |> styled (`Bg `Red) |> styled `Reverse)
-          (Common.Flag.get buff ~off:(off + offsets.flag))
+          (Phantom.pp |> styled (`Bg `Red) |> styled `Reverse)
+          (Phantom.get buff ~off:(off + offsets.flag))
           (*-*)
           Key.pp
           (Key.get buff ~off:(off + offsets.key))
@@ -127,7 +130,7 @@ functor
 
     let compare t key n = Key.compare key (nth_key t n)
 
-    (* Returns 0 if key belong to interval [n, n+1], <0 if its in a lower
+    (* Returns 0 if key belong to interval [n, n+1[, <0 if its in a lower
        interval and >0 if it's in a higher interval. Use this when looking for
        an interval for the key. *)
     let compare_interval t key n =
@@ -230,7 +233,6 @@ functor
       order : [ `Lower | `Higher ];
     }
 
-    (* Called after a remove to update the pointer of the parent node. *)
     let find_with_neighbour t key =
       tic stat_find;
       let n = find_n t key in
@@ -286,7 +288,7 @@ functor
       if not (shadow || append) then shift t position;
 
       let off = Header.size + (position * entry_size) in
-      Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Phantom.to_t false |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
       value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value);
 
@@ -313,13 +315,13 @@ functor
       if Params.debug then assert (keys_sorted t)
 
     let remove t key =
-      (* Because we want to remove exactly [k] we are using [compare] instead of
+      (* Because we want to remove exactly [key] we are using [compare] instead of
          [compare_interval] here. *)
       let compare = compare t key in
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then raise Not_found;
       let off = Header.size + (n * entry_size) in
-      Common.Flag.to_t true |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Phantom.to_t true |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
 
     let merge t1 t2 mode =
@@ -391,8 +393,8 @@ functor
     let migrate kvs kind =
       assert (
         match (kind : Field.kind) with Leaf -> Value.kind = `Leaf | Node _ -> Value.kind = `Node);
-      let not_dead = Bytes.create Common.Flag.size in
-      Common.Flag.to_t false |> Common.Flag.set ~marker:Utils.nop not_dead ~off:0;
+      let not_dead = Bytes.create Phantom.size in
+      Phantom.to_t false |> Phantom.set ~marker:Utils.nop not_dead ~off:0;
       let not_dead = Bytes.to_string not_dead in
       let kvs = List.map (( ^ ) not_dead) kvs in
       let header = migrate_header kind (List.length kvs) in
@@ -402,7 +404,7 @@ functor
       List.iteri
         (fun i (key, value) ->
           let off = Header.size + (i * entry_size) in
-          Common.Flag.to_t false |> Common.Flag.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+          Phantom.to_t false |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
           key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
           value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value))
         kvs;

@@ -99,10 +99,6 @@ module MakeCommon (Params : Params.S) : COMMON = struct
     let size = [ 1; 2; 4; 8 ] |> List.filter (( <= ) minimal_size) |> List.hd
   end)
 
-  module Flag = MakeBool (struct
-    let size = 1
-  end)
-
   module Kind = struct
     type t = kind [@@deriving repr]
 

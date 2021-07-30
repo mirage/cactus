@@ -188,7 +188,8 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
     in
     aux [] (Store.root t.store)
 
-  (* The neighbour of a vertex is its neighbour in the parent mapping. *)
+  (* The address of the neighbour of a vertex is its neighbour in the
+     parent mapping. *)
   let path_to_leaf_with_neighbour t key =
     let rec aux path_with_neighbour address =
       let page = Store.load t.store address in
@@ -271,7 +272,8 @@ module Make (InKey : Input.Key) (InValue : Input.Value) (Size : Input.Size) :
       match path with
       | [] -> ()
       | (address, ({ main; neighbour; order } : Node.neighbour)) :: path -> (
-          (* [address] of the node containing [main] and [neighbour] as entries. *)
+          (* [main] and [neighbour] are entries of the node at address
+             [address]. *)
           match neighbour with
           | None ->
               if not (path = []) then failwith "No neighbour";
