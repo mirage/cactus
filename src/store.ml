@@ -225,9 +225,9 @@ module Make (Params : Params.S) (Common : Field.COMMON) = struct
       if Sys.file_exists dir && Sys.is_directory dir then k ()
       else (
         if Sys.file_exists dir then Unix.unlink dir;
-        (aux [@tailcall]) (Filename.dirname dir) @@ fun () ->
-        Unix.mkdir dir 0o755;
-        k ())
+        (aux [@tailcall]) (Filename.dirname dir) (fun () ->
+            Unix.mkdir dir 0o755;
+            k ()))
     in
     aux dirname (fun () -> ())
 
