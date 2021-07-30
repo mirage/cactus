@@ -46,7 +46,7 @@ module type S = sig
     (** [kind t] is the kind of t, either a Node or a Leaf. *)
 
     val buff : t -> bytes
-    (** [buff t] holds the contents of a pages. *)
+    (** [buff t] holds the contents of the page [t]. *)
 
     val marker : t -> unit -> unit
     (** [marker page] is the function that marks [page] as dirty. A page is dirty when its in memory

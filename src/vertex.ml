@@ -18,7 +18,7 @@ functor
     module Page = Store.Page
     module Header = Vertex_header.Make (Params) (Store) (Common)
 
-    module Phantom = Field.MakeBool (struct
+    module Isdead = Field.MakeBool (struct
       let size = 1
     end)
 
@@ -38,7 +38,7 @@ functor
 
     let ndeadentry t = Header.g_ndeadentry t.header |> Header.Ndeadentry.from_t
 
-    let flag_sz, key_sz, value_sz = (Phantom.size, Params.key_sz, Value.size)
+    let flag_sz, key_sz, value_sz = (Isdead.size, Params.key_sz, Value.size)
 
     let entry_sizes = [ flag_sz; key_sz; value_sz ]
 
@@ -62,7 +62,7 @@ functor
     let nth_key t n = Key.get t.buff ~off:(Header.size + (n * entry_size) + offsets.key)
 
     let nth_dead t n =
-      Phantom.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag) |> Phantom.from_t
+      Isdead.get t.buff ~off:(Header.size + (n * entry_size) + offsets.flag) |> Isdead.from_t
 
     let nth_value t n = Value.get t.buff ~off:(Header.size + (n * entry_size) + offsets.value)
 
@@ -90,10 +90,10 @@ functor
       let pp_entry ppf ~off buff =
         let color = match Value.kind with `Leaf -> `Blue | `Node -> `Cyan in
         pf ppf "@[<hov 1>dead:@ %a%,%a@]@;@[<hov 1>key:@ %a@]@;@[<hov 1>value:@ %a@]"
-          (Phantom.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
+          (Isdead.pp_raw ~off:(off + offsets.flag) |> styled (`Bg `Red))
           buff
-          (Phantom.pp |> styled (`Bg `Red) |> styled `Reverse)
-          (Phantom.get buff ~off:(off + offsets.flag))
+          (Isdead.pp |> styled (`Bg `Red) |> styled `Reverse)
+          (Isdead.get buff ~off:(off + offsets.flag))
           (*-*)
           Key.pp
           (Key.get buff ~off:(off + offsets.key))
@@ -288,7 +288,7 @@ functor
       if not (shadow || append) then shift t position;
 
       let off = Header.size + (position * entry_size) in
-      Phantom.to_t false |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Isdead.to_t false |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
       value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value);
 
@@ -321,7 +321,7 @@ functor
       let n = Utils.binary_search ~compare 0 (nentry t) in
       if nth_dead t n then raise Not_found;
       let off = Header.size + (n * entry_size) in
-      Phantom.to_t true |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+      Isdead.to_t true |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
       Header.s_ndeadentry t.header (ndeadentry t + 1 |> Header.Ndeadentry.to_t)
 
     let merge t1 t2 mode =
@@ -393,8 +393,8 @@ functor
     let migrate kvs kind =
       assert (
         match (kind : Field.kind) with Leaf -> Value.kind = `Leaf | Node _ -> Value.kind = `Node);
-      let not_dead = Bytes.create Phantom.size in
-      Phantom.to_t false |> Phantom.set ~marker:Utils.nop not_dead ~off:0;
+      let not_dead = Bytes.create Isdead.size in
+      Isdead.to_t false |> Isdead.set ~marker:Utils.nop not_dead ~off:0;
       let not_dead = Bytes.to_string not_dead in
       let kvs = List.map (( ^ ) not_dead) kvs in
       let header = migrate_header kind (List.length kvs) in
@@ -404,7 +404,7 @@ functor
       List.iteri
         (fun i (key, value) ->
           let off = Header.size + (i * entry_size) in
-          Phantom.to_t false |> Phantom.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
+          Isdead.to_t false |> Isdead.set ~marker:t.marker t.buff ~off:(off + offsets.flag);
           key |> Key.set ~marker:t.marker t.buff ~off:(off + offsets.key);
           value |> Value.set ~marker:t.marker t.buff ~off:(off + offsets.value))
         kvs;
