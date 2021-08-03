@@ -11,7 +11,8 @@
   logs.cli
   logs.fmt
   oracle
-  memtrace)
+  memtrace
+  rusage)
  (preprocess
   (pps ppx_repr)))
 

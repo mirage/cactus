@@ -40,6 +40,12 @@ let init () =
   Utils.clean "_bench/replay/";
   Logs.set_reporter Log.app_reporter
 
+
+let get_maxrss () =
+    let usage = Rusage.(get Self) in
+    let ( / ) = Int64.div in
+    Int64.to_int (usage.maxrss / 1024L / 1024L)
+
 let main trace _ =
   init ();
   match trace with
@@ -51,8 +57,8 @@ let main trace _ =
       let tree = Btree.create root in
       Btree.replay ~prog:`Multiple trace tree;
       Logs.info (fun reporter ->
-          reporter "Max memory usage : %i@."
-            (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000))
+          reporter "Max memory usage : %i Maxrss : %d @."
+            (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000) (get_maxrss ()))
 
 open Cmdliner
 
