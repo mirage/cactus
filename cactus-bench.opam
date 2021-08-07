@@ -26,6 +26,7 @@ depends: [
   "digestif"
   "optint" {>= "0.1.0"}
   "irmin" {>= "2.3.0"}
+  "rusage"
 ]
 build: [
   ["dune" "subst"] {dev}

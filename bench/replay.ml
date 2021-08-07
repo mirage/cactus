@@ -16,6 +16,7 @@
  *)
 
 open Encoding
+module Stats = Btree.Index_stats
 
 module Key : Btree.Input.Key with type t = Key.t = struct
   include Key
@@ -40,13 +41,44 @@ let init () =
   Utils.clean "_bench/replay/";
   Logs.set_reporter Log.app_reporter
 
-
 let get_maxrss () =
-    let usage = Rusage.(get Self) in
-    let ( / ) = Int64.div in
-    Int64.to_int (usage.maxrss / 1024L / 1024L)
+  let usage = Rusage.(get Self) in
+  let ( / ) = Int64.div in
+  Int64.to_int (usage.maxrss / 1024L / 1024L)
 
-let main trace _ =
+let with_timer f =
+  let started = Mtime_clock.counter () in
+  let a = f () in
+  let duration = Mtime_clock.count started in
+  (a, duration)
+
+let with_stats_and_timer f =
+  Stats.reset_stats ();
+  let _, duration = with_timer f in
+  let stats = Stats.get () in
+  (duration, stats)
+
+let pp_results ~with_stats duration (stats : Stats.t) =
+  let gc_mem = Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000 in
+  let maxrss = get_maxrss () in
+  Logs.info (fun reporter ->
+      reporter "@[<v 0>Total time: %a@,Max memory usage : %i @,Maxrss : %d @, @]" Mtime.Span.pp
+        duration gc_mem maxrss);
+  if with_stats then
+    Logs.info (fun reporter ->
+        reporter
+          "@[<v 0>Bytes read: %d@,\
+           Number of reads: %d@,\
+           Bytes written: %d@,\
+           Number of writes: %d@,\
+           Bytes total: %d@,\
+           Number of IO: %d@,\
+           @]"
+          stats.bytes_read stats.nb_reads stats.bytes_written stats.nb_writes
+          (stats.bytes_read + stats.bytes_written)
+          (stats.nb_reads + stats.nb_writes))
+
+let main trace with_stats () =
   init ();
   match trace with
   | None ->
@@ -54,11 +86,12 @@ let main trace _ =
       Cmdliner.Term.exit (`Error `Parse)
   | Some trace ->
       let root = "_bench/replay" in
-      let tree = Btree.create root in
-      Btree.replay ~prog:`Multiple trace tree;
-      Logs.info (fun reporter ->
-          reporter "Max memory usage : %i Maxrss : %d @."
-            (Gc.stat () |> fun stat -> stat.top_heap_words * Sys.word_size / 8 / 1_000_000) (get_maxrss ()))
+      let replay () =
+        let tree = Btree.create root in
+        Btree.replay ~prog:`Multiple trace tree
+      in
+      let duration, stats = with_stats_and_timer replay in
+      pp_results ~with_stats duration stats
 
 open Cmdliner
 
@@ -71,8 +104,13 @@ let trace =
 
 let setup_log = Term.(const Log.setup_log $ Fmt_cli.style_renderer () $ Logs_cli.level ())
 
+let with_stats =
+  let doc = "Print IO stats." in
+  Arg.(value & flag & info [ "stats" ] ~doc)
+
 let cmd =
   let doc = "Replay a trace" in
-  (Term.(const main $ trace $ setup_log), Term.info "replay" ~doc ~exits:Term.default_exits)
+  ( Term.(const main $ trace $ with_stats $ setup_log),
+    Term.info "replay" ~doc ~exits:Term.default_exits )
 
 let () = Term.exit @@ Term.eval cmd

@@ -40,6 +40,8 @@ module Index = struct
   module Stats = Btree_index.Stats
 end
 
+module Index_stats = Index_stats
+
 module type Btree = sig
   module Private = Private
 
@@ -50,4 +52,5 @@ module type Btree = sig
   module Make : MAKER
 
   module Index = Index
+  module Index_stats = Index_stats
 end
