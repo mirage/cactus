@@ -12,20 +12,20 @@ bug-reports: "https://github.com/mirage/cactus/issues/"
 depends: [
   "dune" {>= "2.0"}
   "ocaml" {>= "4.08.0"}
-  "repr" {>= "0.2.1" & with-test}
+  "repr" {>= "0.2.1"  & <= "0.4.0" & with-test}
   "ppx_repr" {>= "0.2.1" & with-test}
   "logs" {>= "0.7.0" & with-test}
   "mtime" {>= "1.2.0" & with-test}
   "progress" {>= "0.2.1" & with-test}
   "bentov" {>= "1"}
   "fmt" {>= "0.8.9" & with-test}
-  "cmdliner"
+  "cmdliner" {>= "1.1.0"}
   "memtrace" {>= "0.1.1"}
   "alcotest" {>= "1.4.0" & with-test}
   "zarith"
   "digestif"
   "optint" {>= "0.1.0"}
-  "irmin" {>= "2.3.0"}
+  "irmin" {>= "2.3.0" & <= "2.7.2"}
 ]
 build: [
   ["dune" "subst"] {dev}

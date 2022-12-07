@@ -179,7 +179,7 @@ let run version key_sz value_sz fanout cache_size page_size nb_entries minimal w
 
 open Cmdliner
 
-let env_var s = Arg.env_var ("BTREE_BENCH_" ^ s)
+let env_var s = Cmd.Env.info ("BTREE_BENCH_" ^ s)
 
 let key_sz =
   let doc = "The size of a key." in
@@ -267,7 +267,9 @@ let force =
 
 let cmd =
   let doc = "Run all benchmarks." in
-  ( Term.(
+  let info = Cmd.info "run" ~doc ~exits:Cmd.Exit.defaults in
+  Cmd.v info
+    Term.(
       const run
       $ version
       $ key_sz
@@ -284,7 +286,6 @@ let cmd =
       $ start_sz
       $ force
       $ random_sleep
-      $ setup_log),
-    Term.info "run" ~doc ~exits:Term.default_exits )
+      $ setup_log)
 
-let () = Term.(exit @@ eval cmd)
+let () = exit @@ Cmd.eval cmd

@@ -45,7 +45,7 @@ let main trace _ =
   match trace with
   | None ->
       Fmt.pr "%a A trace file must be specified@." Fmt.(styled (`Fg `Red) string) "[Parse error]";
-      Cmdliner.Term.exit (`Error `Parse)
+      Stdlib.exit 124
   | Some trace ->
       let root = "_bench/replay" in
       let tree = Btree.create root in
@@ -56,7 +56,7 @@ let main trace _ =
 
 open Cmdliner
 
-let env_var s = Arg.env_var ("BTREE_REPLAY_" ^ s)
+let env_var s = Cmd.Env.info ("BTREE_REPLAY_" ^ s)
 
 let trace =
   let doc = "Path to a btree.trace" in
@@ -67,6 +67,7 @@ let setup_log = Term.(const Log.setup_log $ Fmt_cli.style_renderer () $ Logs_cli
 
 let cmd =
   let doc = "Replay a trace" in
-  (Term.(const main $ trace $ setup_log), Term.info "replay" ~doc ~exits:Term.default_exits)
+  let info = Cmd.info "replay" ~doc ~exits:Cmd.Exit.defaults in
+  Cmd.v info Term.(const main $ trace $ setup_log)
 
-let () = Term.exit @@ Term.eval cmd
+let () = exit @@ Cmd.eval cmd
