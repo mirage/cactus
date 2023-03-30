@@ -12,8 +12,8 @@ bug-reports: "https://github.com/mirage/cactus/issues/"
 depends: [
   "dune" {>= "2.0"}
   "ocaml" {>= "4.08.0"}
-  "repr" {>= "0.2.1" & with-test}
-  "ppx_repr" {>= "0.2.1" & with-test}
+  "repr" {>= "0.2.1" & < "0.5" & with-test}
+  "ppx_repr" {>= "0.2.1" & < "0.5" & with-test}
   "logs" {>= "0.7.0" & with-test}
   "mtime" {>= "1.2.0" & with-test}
   "progress" {>= "0.2.1" & with-test}
@@ -25,7 +25,7 @@ depends: [
   "zarith"
   "digestif"
   "optint" {>= "0.1.0"}
-  "irmin" {>= "2.3.0"}
+  "irmin" {>= "2.3.0" & < "3"}
 ]
 build: [
   ["dune" "subst"] {dev}
